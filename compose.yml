@@ -2,7 +2,7 @@ name: pi-web-container
 
 services:
   pi-web:
-    image: ${PI_WEB_IMAGE:-ghcr.io/darknightlab/pi-web-container:latest}
+    image: ${PI_WEB_IMAGE:-ghcr.io/darknightlab/pi-web-container:main}
     # Local builds are optional; uncomment to build instead of pulling the cloud image.
     # build:
     #   context: .
@@ -13,6 +13,8 @@ services:
     ports:
       - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PI_WEB_PORT:-8504}:8504"
     environment:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
       HOME: /data/home
       XDG_CONFIG_HOME: /data/config
       PI_WEB_HOST: 0.0.0.0

@@ -8,6 +8,8 @@ FROM ghcr.io/nixos/nix:latest
 
 ENV NIX_CONFIG="experimental-features = nix-command flakes" \
     PATH="/usr/local/bin:$PATH" \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     npm_config_prefix=/usr/local \
     HOME=/data/home \
     XDG_CONFIG_HOME=/data/config \
@@ -27,6 +29,7 @@ WORKDIR /
 COPY flake.nix flake.lock /build/
 WORKDIR /build
 RUN mkdir -p /usr/local/bin \
+ && ln -sf /root/.nix-profile/bin/bash /bin/bash \
  && dev="$(nix build .#devEnv --no-link --print-out-paths)" \
  && for f in "$dev"/bin/*; do ln -sf "$f" /usr/local/bin/; done \
  && rm -rf /build

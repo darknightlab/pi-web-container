@@ -5,7 +5,29 @@ set -euo pipefail
 # and a web/API server. In a container we start the daemon in the background
 # and keep the web server in the foreground so the container lifecycle is simple.
 
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
 mkdir -p "$HOME" "$(dirname "$PI_WEB_SESSIOND_SOCKET")"
+
+# Seed a comfortable $HOME shell on first start (PI WEB's bash-able /bin/bash).
+if [ ! -f "$HOME/.bash_profile" ]; then
+  cat > "$HOME/.bash_profile" <<'PROF'
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+PROF
+fi
+if [ ! -f "$HOME/.bashrc" ]; then
+  cat > "$HOME/.bashrc" <<'RC'
+# A pleasant default prompt for the PI WEB shell.
+if [ -x /usr/local/bin/starship ]; then
+  eval "$(starship init bash)"
+else
+  PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\] \$ '
+fi
+export PS1
+alias ls='ls --color=auto'
+RC
+fi
 
 echo "[pi-web] starting session daemon"
 pi-web-sessiond &
