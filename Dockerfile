@@ -22,10 +22,14 @@ ARG PI_WEB_VERSION=latest
 WORKDIR /
 
 # Nix-managed toolchain + developer tools (see flake.nix).
-# Symlink the devEnv bins into /usr/local so they stay usable after USER 1000.
-COPY flake.nix flake.lock /
+# Symlink the devEnv bins into /usr/local so they stay usable at runtime.
+# Use a dedicated /build dir: nix must not treat the whole / as its source.
+COPY flake.nix flake.lock /build/
+WORKDIR /build
 RUN dev="$(nix build .#devEnv --no-link --print-out-paths)" \
- && for f in "$dev"/bin/*; do ln -s "$f" /usr/local/bin/; done
+ && for f in "$dev"/bin/*; do ln -s "$f" /usr/local/bin/; done \
+ && rm -rf /build
+WORKDIR /
 
 # PI WEB plus its peer dependencies (including the bundled Pi agent).
 # The peer `pi` binary does not land on PATH, so we link it like upstream does.
