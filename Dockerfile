@@ -26,8 +26,9 @@ WORKDIR /
 # Use a dedicated /build dir: nix must not treat the whole / as its source.
 COPY flake.nix flake.lock /build/
 WORKDIR /build
-RUN dev="$(nix build .#devEnv --no-link --print-out-paths)" \
- && for f in "$dev"/bin/*; do ln -s "$f" /usr/local/bin/; done \
+RUN mkdir -p /usr/local/bin \
+ && dev="$(nix build .#devEnv --no-link --print-out-paths)" \
+ && for f in "$dev"/bin/*; do ln -sf "$f" /usr/local/bin/; done \
  && rm -rf /build
 WORKDIR /
 
