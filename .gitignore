@@ -1,0 +1,14 @@
+# Persistent data and user workspaces
+data/
+
+# Nix build output
+result
+
+# Compose / runtime vars
+.env
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.log
+.DS_Store
