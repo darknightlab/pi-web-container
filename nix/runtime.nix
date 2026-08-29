@@ -79,6 +79,7 @@ in
       curl
       direnv
       dnsutils
+      ethtool
       file
       gcc
       gdu
@@ -92,18 +93,21 @@ in
       iperf3
       jq
       lsof
+      net-tools
       nexttrace
       nixd
       nixfmt
       nodejs_latest
-      pi-coding-agent
       pixi
+      pi-coding-agent
       pkg-config
       psmisc
       reptyr
       shadow.su
       starship
       sudo
+      tcpdump
+      texliveFull
       tmux
       unzip
       vim
