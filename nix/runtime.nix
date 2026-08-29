@@ -103,8 +103,10 @@ in
       inputs.nix-index-database.packages.${system}.nix-index-with-db
       (inputs.paseo.packages.${system}.paseo.overrideAttrs (old: {
         postInstall = (old.postInstall or "") + ''
-          mkdir -p $out/lib/paseo/packages/server/node_modules/node-pty/build
-          cp -a node_modules/node-pty/build/Release $out/lib/paseo/packages/server/node_modules/node-pty/build/
+          ptyPlatform="$(node -p 'process.platform + "-" + process.arch')"
+          target=$out/lib/paseo/packages/server/node_modules/node-pty/prebuilds
+          mkdir -p "$target"
+          cp -a "packages/server/node_modules/node-pty/prebuilds/$ptyPlatform" "$target/"
         '';
       }))
       iperf3
