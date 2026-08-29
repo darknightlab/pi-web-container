@@ -58,6 +58,14 @@ let
     install -Dm644 ${pam} /etc/pam.d/su
     install -Dm644 ${pam} /etc/pam.d/sudo
     install -Dm440 ${sudoers} /etc/sudoers
+
+    rm /bin/sh /usr/bin/env
+    rmdir /bin /usr/bin
+    ln -s /nix/var/nix/profiles/runtime/bin /usr/bin
+    ln -s /nix/var/nix/profiles/runtime/bin /usr/sbin
+    ln -s usr/bin /bin
+    ln -s usr/sbin /sbin
+
     mkdir -p -m 700 /home/pi
   '';
 
@@ -77,32 +85,48 @@ in
       cmake
       coreutils
       curl
+      diffutils
       direnv
       dnsutils
       ethtool
       file
+      gawk
       gcc
       gdu
       gh
       git
       gnumake
+      gnupg
+      gnused
       go
       inetutils
       inputs.nix-index-database.packages.${system}.nix-index-with-db
-      inputs.paseo.packages.${system}.paseo
+      (inputs.paseo.packages.${system}.paseo.overrideAttrs (old: {
+        postInstall = (old.postInstall or "") + ''
+          mkdir -p $out/lib/paseo/packages/server/node_modules/node-pty/build
+          cp -a node_modules/node-pty/build/Release $out/lib/paseo/packages/server/node_modules/node-pty/build/
+        '';
+      }))
       iperf3
+      iproute2
       jq
+      lbzip2
       lsof
       net-tools
       nexttrace
       nixd
       nixfmt
       nodejs_latest
-      pixi
+      openssl
+      patch
       pi-coding-agent
+      pixi
       pkg-config
+      procps
       psmisc
       reptyr
+      ripgrep
+      rsync
       shadow.su
       starship
       sudo
@@ -112,6 +136,7 @@ in
       unzip
       vim
       wget
+      which
       yq-go
     ];
   };
