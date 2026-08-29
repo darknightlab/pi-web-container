@@ -51,6 +51,7 @@ install -m 600 "$candidate" "$agents"
 rm -f "$seed_state/AGENTS.md.sha256"
 
 cd "$HOME"
+bind_addr=${CONTAINER_BIND_ADDR:-127.0.0.1}
 
 supervise() {
   local name=$1
@@ -97,13 +98,13 @@ shutdown() {
 trap shutdown TERM INT
 
 supervise paseo env \
-  PASEO_LISTEN=0.0.0.0:6767 \
+  PASEO_LISTEN="$bind_addr:6767" \
   PASEO_WEB_UI_ENABLED=true \
   paseo-server &
 
 supervise pi-web env \
   PI_WEB_SKIP_VERSION_CHECK=1 \
-  pi-web --hostname 0.0.0.0 --port 30141 --no-open &
+  pi-web --hostname "$bind_addr" --port 30141 --no-open &
 
 pair_once &
 wait

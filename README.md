@@ -34,6 +34,16 @@ The default image is:
 ghcr.io/darknightlab/pi-web-container:main
 ```
 
+Compose uses host networking by default, while both services bind to `127.0.0.1`. This keeps the host-networked services accessible only from the host loopback interface.
+
+For bridge networking, remove `network_mode: host`, uncomment the `ports:` block in `compose.yml`, and set:
+
+```dotenv
+CONTAINER_BIND_ADDR=0.0.0.0
+```
+
+A bridge container listening only on its own `127.0.0.1` cannot receive traffic forwarded to its container IP.
+
 ## PI Web
 
 Open <http://127.0.0.1:30141> to browse and resume Pi sessions, configure models, inspect files, and use Git worktrees.
@@ -85,9 +95,10 @@ Common options:
 | Variable | Purpose |
 | --- | --- |
 | `PI_WEB_IMAGE` | Container image |
-| `PI_WEB_BIND_ADDR` | Host bind address; defaults to `127.0.0.1` |
-| `PI_WEB_PORT` | PI Web host port |
-| `PASEO_PORT` | Paseo host port |
+| `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
+| `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
+| `PI_WEB_PORT` | Bridge-mode PI Web host port |
+| `PASEO_PORT` | Bridge-mode Paseo host port |
 | `PI_WEB_PASSWORD` | PI Web Basic Auth password; username is `pi` |
 | `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames |
 | `PASEO_PASSWORD` | Paseo direct-connection password |
@@ -147,7 +158,7 @@ podman compose down
 
 ## Security
 
-Both services can run coding agents with access to the mounted home directory. Ports bind to localhost by default. For remote access, set both passwords and use HTTPS, Tailscale, or an SSH tunnel.
+Both services can run coding agents with access to the mounted home directory. Host mode binds both services to loopback by default. For remote access, set both passwords and use HTTPS, Tailscale, or an SSH tunnel.
 
 ## Licenses
 

@@ -3,15 +3,16 @@ name: pi-web-container
 services:
   pi-web:
     image: ${PI_WEB_IMAGE:-ghcr.io/darknightlab/pi-web-container:main}
-    # build:
-    #   context: .
-    #   args:
-    #     PI_WEB_VERSION: ${PI_WEB_VERSION:-latest}
+    build:
+      context: .
+      args:
+        PI_WEB_VERSION: ${PI_WEB_VERSION:-latest}
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PI_WEB_PORT:-30141}:30141"
-      - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PASEO_PORT:-6767}:6767"
+    network_mode: host
+    # ports:
+    #   - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PI_WEB_PORT:-30141}:30141"
+    #   - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PASEO_PORT:-6767}:6767"
     volumes:
       - ./data/home:/home
