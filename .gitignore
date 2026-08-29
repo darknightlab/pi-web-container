@@ -1,4 +1,4 @@
-# Persistent data and user workspaces
+# Persistent state: the only mount, and it is the container's $HOME
 data/
 
 # Nix build output

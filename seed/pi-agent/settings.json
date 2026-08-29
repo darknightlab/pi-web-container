@@ -1,0 +1,22 @@
+{
+  "defaultProvider": "opencode-free",
+  "defaultModel": "big-pickle",
+  "packages": [
+    "npm:pi-mcp-adapter",
+    "npm:@narumitw/pi-goal",
+    {
+      "source": "npm:@narumitw/pi-plan-mode",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    },
+    {
+      "source": "npm:@narumitw/pi-subagents",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    }
+  ]
+}

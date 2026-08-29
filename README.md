@@ -1,67 +1,154 @@
 # pi-web-container
 
-Portable [PI WEB](https://pi-web.dev) development container, built from the
-official [Nix container image](https://ghcr.io/nixos/nix) and intended to run
-on any Linux with podman or docker (rootless included).
+A rootless Podman/Docker container running:
 
-The image keeps your Nix workflow intact: the toolchain is a Nix flake
-`devEnv` (Node latest, Python, GCC, and the `git`/`tmux`/`direnv`/`starship`
-dev tools plus CLI utilities from your NixOS setup), built via `nix build .#devEnv`.
-PI WEB and its peer Pi agent are then installed from npm, and the bundled `pi`
-binary is linked onto `PATH`, exactly like PI WEB's upstream Dockerfile does.
+- [PI Web](https://github.com/agegr/pi-web): browser UI for Pi sessions
+- [Paseo](https://paseo.sh): Web, mobile, desktop, and CLI access to coding agents
+- [Pi](https://github.com/earendil-works/pi): coding agent used by both services
 
-## Layout
+PI Web and Paseo share the same Pi configuration and sessions.
 
-```text
-.
-├── flake.nix        # devEnv: Nix-managed toolchain + dev tools
-├── flake.lock
-├── Dockerfile       # flake devEnv + npm PI WEB, based on ghcr.io/nixos/nix
-├── entrypoint.sh   # session daemon (background) + web server (foreground)
-├── .github/workflows/  # docker-publish.yml: build & push to ghcr.io
-├── compose.yml    # compose/podman orchestrator (defaults to ghcr latest)
-└── .env.example
-```
-
-## Quick start
-
-Default behavior pulls the cloud image `ghcr.io/darknightlab/pi-web-container:latest`.
+## Start
 
 ```bash
 cp .env.example .env
-# optional: edit PI_WEB_VERSION / PI_WEB_PORT / PI_WEB_BIND_ADDR
-
 podman compose up -d
-# or: docker compose up -d
+podman compose logs -f
 ```
 
-To build locally instead (uncomment the `build:` block), use `--build`: `podman compose up -d --build`.
-
-Then open <http://127.0.0.1:8504>.
-
-Workspace is mounted at `./workspace`, and persistent PI WEB / Pi state lives in
-`./data`.
-
-## Commands
+Docker Compose works too:
 
 ```bash
-podman compose up -d --build      # build locally and start
-podman compose up -d            # pull cloud image and start
-podman compose ps              # status
-podman compose logs -f pi-web   # logs
-podman compose down           # stop
+docker compose up -d
+docker compose logs -f
 ```
 
-## Build arguments
+Open:
 
-| Variable        | Default  | Meaning                          |
-| --------------- | -------- | -------------------------------- |
-| `PI_WEB_VERSION` | `latest` | npm release for `@jmfederico/pi-web` |
+- PI Web: <http://127.0.0.1:30141>
+- Paseo: <http://127.0.0.1:6767>
 
-## Notes
+The default image is:
 
-- The image is a minimal container: Pi agents run inside the container and work on the
-  mounted workspace paths.
-- Keep the web port bound to localhost by default. For remote use, prefer an SSH
-  tunnel, a trusted VPN, or an authenticated reverse proxy; do not expose it
-  directly to the public internet.
+```text
+ghcr.io/darknightlab/pi-web-container:main
+```
+
+## PI Web
+
+Open <http://127.0.0.1:30141> to browse and resume Pi sessions, configure models, inspect files, and use Git worktrees.
+
+A new home starts with anonymous OpenCode Free models and the same initial Pi package configuration shipped by this repository. Existing persistent Pi settings are preserved.
+
+Useful commands:
+
+```bash
+podman compose exec pi-web pi
+podman compose exec pi-web pi --list-models
+podman compose exec pi-web pi config
+```
+
+## Paseo
+
+Open <http://127.0.0.1:6767> for the Paseo Web UI.
+
+On first start, the container log prints a pairing QR code and link for the Paseo mobile or desktop app:
+
+```bash
+podman compose logs -f
+```
+
+Print the pairing information again:
+
+```bash
+podman compose exec pi-web paseo daemon pair --relay
+```
+
+Useful commands:
+
+```bash
+podman compose exec pi-web paseo daemon status
+podman compose exec pi-web paseo provider diagnostic pi
+podman compose exec pi-web paseo project create /home/pi
+podman compose exec pi-web paseo run "your task"
+podman compose exec pi-web paseo ls -a -g
+```
+
+Paseo supports Pi natively. Sessions created through Paseo use the same Pi data and can also appear in PI Web.
+
+## Configuration
+
+Edit `.env` before starting the container.
+
+Common options:
+
+| Variable | Purpose |
+| --- | --- |
+| `PI_WEB_IMAGE` | Container image |
+| `PI_WEB_BIND_ADDR` | Host bind address; defaults to `127.0.0.1` |
+| `PI_WEB_PORT` | PI Web host port |
+| `PASEO_PORT` | Paseo host port |
+| `PI_WEB_PASSWORD` | PI Web Basic Auth password; username is `pi` |
+| `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames |
+| `PASEO_PASSWORD` | Paseo direct-connection password |
+| `PASEO_HOSTNAMES` | Additional Paseo hostnames |
+| `PASEO_RELAY_ENDPOINT` | Custom relay endpoint in `host:port` form |
+| `PASEO_RELAY_USE_TLS` | Set to `true` for a custom TLS relay |
+| `CONTAINER_RESTART_DELAY` | Delay before restarting a failed service |
+
+For a custom relay:
+
+```dotenv
+PASEO_RELAY_ENDPOINT=relay.example.com:443
+PASEO_RELAY_USE_TLS=true
+```
+
+See `.env.example` for all supported variables.
+
+## Persistent data
+
+Compose mounts:
+
+```text
+./data/home  ->  /home
+```
+
+The default working directory is `/home/pi`. Back up `./data/home` to preserve Pi sessions, credentials, Paseo pairing state, settings, and projects.
+
+## Update
+
+```bash
+podman compose pull
+podman compose up -d
+```
+
+For Docker:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+## Build locally
+
+Uncomment the `build:` block in `compose.yml`, then run:
+
+```bash
+podman compose up -d --build
+```
+
+`PI_WEB_VERSION` controls the npm version of `@agegr/pi-web`; the Dockerfile default is `latest`.
+
+## Stop
+
+```bash
+podman compose down
+```
+
+## Security
+
+Both services can run coding agents with access to the mounted home directory. Ports bind to localhost by default. For remote access, set both passwords and use HTTPS, Tailscale, or an SSH tunnel.
+
+## Licenses
+
+PI Web and Pi are MIT licensed. Paseo is AGPL-3.0+.

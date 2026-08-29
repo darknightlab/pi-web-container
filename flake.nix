@@ -1,53 +1,38 @@
 {
-  description = "PI WEB portable dev environment (Nix-managed toolchain)";
+  description = "PI Web + Paseo container runtime";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    paseo.url = "github:getpaseo/paseo";
+    nix-index-database = {
+      url = "github:nix-community/nix-index-database";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    inputs@{
+      nixpkgs,
+      ...
+    }:
     let
       systems = [
         "x86_64-linux"
         "aarch64-linux"
       ];
-      forAllSystems = nixpkgs.lib.genAttrs systems (system:
-        let pkgs = nixpkgs.legacyPackages.${system};
-        in {
-          devEnv = pkgs.buildEnv {
-            name = "pi-web-dev-env";
-            paths = with pkgs; [
-              # PI WEB / node-pty build & runtime toolchain
-              coreutils
-              gnused
-              gnumake
-              gcc
-              python3
-              nodejs_latest
-              git
-
-              # Developer tools mirrored from ~/NixOS
-              starship
-              direnv
-              tmux
-              reptyr
-              go
-              nixfmt
-              nixd
-              pixi
-              gdu
-
-              # Everyday CLI utilities
-              curl
-              wget
-              jq
-              ripgrep
-              fd
-              unzip
-              vim
-            ];
-          };
-        });
     in
     {
-      packages = forAllSystems;
+      packages = nixpkgs.lib.genAttrs systems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          container = pkgs.callPackage ./nix/runtime.nix {
+            inherit inputs system;
+          };
+        in
+        {
+          inherit (container) runtimeEnv setup entrypoint;
+        }
+      );
     };
 }

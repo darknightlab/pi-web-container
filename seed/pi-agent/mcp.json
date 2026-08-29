@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp"],
+      "env": {
+        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1",
+        "PLAYWRIGHT_MCP_NO_SANDBOX": "1",
+        "PLAYWRIGHT_MCP_EXECUTABLE_PATH": "/nix/var/nix/profiles/runtime/bin/chromium"
+      }
+    }
+  }
+}

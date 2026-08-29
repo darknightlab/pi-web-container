@@ -1,56 +1,109 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
-# PI WEB runs as two processes: a session daemon that owns Pi agent runtimes
-# and a web/API server. In a container we start the daemon in the background
-# and keep the web server in the foreground so the container lifecycle is simple.
+state=/tmp/pi-web-container
+rm -rf "$state"
+install -d -m 700 "$HOME"
+mkdir -p "$state" "$HOME/.pi/agent" "$HOME/.paseo"
 
-export LANG="${LANG:-C.UTF-8}"
-export LC_ALL="${LC_ALL:-C.UTF-8}"
+seed=/usr/share/pi-web-container/seed/pi-agent
+seed_state="$HOME/.pi/agent/.seed-state"
+install -d -m 700 "$seed_state"
 
-mkdir -p "$HOME" "$(dirname "$PI_WEB_SESSIOND_SOCKET")"
-
-# Seed a comfortable $HOME shell on first start (PI WEB's bash-able /bin/bash).
-if [ ! -f "$HOME/.bash_profile" ]; then
-  cat > "$HOME/.bash_profile" <<'PROF'
-[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
-PROF
-fi
-if [ ! -f "$HOME/.bashrc" ]; then
-  cat > "$HOME/.bashrc" <<'RC'
-# A pleasant default prompt for the PI WEB shell.
-if [ -x /usr/local/bin/starship ]; then
-  eval "$(starship init bash)"
-else
-  PS1='\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\] \$ '
-fi
-export PS1
-alias ls='ls --color=auto'
-RC
-fi
-
-echo "[pi-web] starting session daemon"
-pi-web-sessiond &
-
-sessiond_pid=$!
-cleanup() {
-  kill "$sessiond_pid" 2>/dev/null || true
-  wait "$sessiond_pid" 2>/dev/null || true
+file_hash() {
+  sha256sum "$1" | cut -d ' ' -f 1
 }
-trap cleanup EXIT INT TERM
 
-echo "[pi-web] waiting for session daemon socket: $PI_WEB_SESSIOND_SOCKET"
-for _ in $(seq 1 30); do
-  if [ -S "$PI_WEB_SESSIOND_SOCKET" ]; then
-    break
+update_seed() {
+  local file=$1
+  local source="$seed/$file"
+  local target="$HOME/.pi/agent/$file"
+  local stamp="$seed_state/$file.sha256"
+  local update=0
+
+  if [ ! -e "$target" ]; then
+    update=1
+  elif [ -e "$stamp" ] && [ "$(file_hash "$target")" = "$(cat "$stamp")" ]; then
+    update=1
   fi
-  sleep 1
-done
 
-if [ ! -S "$PI_WEB_SESSIOND_SOCKET" ]; then
-  echo "[pi-web] session daemon did not become ready" >&2
-  exit 1
+  if [ "$update" -eq 1 ]; then
+    install -m 600 "$source" "$target"
+    file_hash "$target" > "$stamp"
+  fi
+}
+
+for file in environment.md settings.json models.json mcp.json; do
+  update_seed "$file"
+done
+[ -e "$HOME/.pi/agent/instructions.md" ] || install -m 600 "$seed/instructions.md" "$HOME/.pi/agent/instructions.md"
+
+agents="$HOME/.pi/agent/AGENTS.md"
+candidate="$state/AGENTS.md"
+
+cat "$HOME/.pi/agent/environment.md" > "$candidate"
+if [ -s "$HOME/.pi/agent/instructions.md" ]; then
+  printf '\n' >> "$candidate"
+  cat "$HOME/.pi/agent/instructions.md" >> "$candidate"
 fi
 
-echo "[pi-web] starting web server on :$PI_WEB_PORT"
-exec pi-web-server
+install -m 600 "$candidate" "$agents"
+rm -f "$seed_state/AGENTS.md.sha256"
+
+cd "$HOME"
+
+supervise() {
+  local name=$1
+  shift
+  while [ ! -e "$state/stop" ]; do
+    "$@" &
+    echo $! > "$state/$name.pid"
+    wait $!
+    rm -f "$state/$name.pid"
+    [ -e "$state/stop" ] || sleep "${CONTAINER_RESTART_DELAY:-3}"
+  done
+}
+
+pair_once() {
+  local marker="$HOME/.paseo/.pairing-shown"
+  [ -e "$marker" ] && return
+
+  for _ in $(seq 1 60); do
+    if curl -fsS -m 2 -o /dev/null http://127.0.0.1:6767/api/health; then
+      if paseo daemon pair --relay; then
+        touch "$marker"
+      fi
+      return
+    fi
+    sleep 1
+  done
+  echo "[entrypoint] Paseo did not become ready; pairing code was not printed." >&2
+}
+
+shutdown() {
+  touch "$state/stop"
+  local file pid
+  for file in "$state"/*.pid; do
+    [ -e "$file" ] || continue
+    pid=$(cat "$file")
+    kill "$pid" 2>/dev/null || true
+  done
+  for pid in $(jobs -p); do
+    kill "$pid" 2>/dev/null || true
+  done
+  wait
+  exit 0
+}
+trap shutdown TERM INT
+
+supervise paseo env \
+  PASEO_LISTEN=0.0.0.0:6767 \
+  PASEO_WEB_UI_ENABLED=true \
+  paseo-server &
+
+supervise pi-web env \
+  PI_WEB_SKIP_VERSION_CHECK=1 \
+  pi-web --hostname 0.0.0.0 --port 30141 --no-open &
+
+pair_once &
+wait

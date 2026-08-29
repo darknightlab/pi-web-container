@@ -1,52 +1,29 @@
-# PI WEB on the official Nix container image.
-# Runs on any Linux with podman/docker (rootless works too).
-#
-# The toolchain and dev tools come from the Nix flake (flake.nix), with their
-# bins linked into /usr/local so they work for the non-root runtime user.
-# PI WEB itself is installed from npm on top, with node-pty compiled in-image.
 FROM ghcr.io/nixos/nix:latest
-
-ENV NIX_CONFIG="experimental-features = nix-command flakes" \
-    PATH="/usr/local/bin:$PATH" \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
-    npm_config_prefix=/usr/local \
-    HOME=/data/home \
-    XDG_CONFIG_HOME=/data/config \
-    PI_WEB_HOST=0.0.0.0 \
-    PI_WEB_PORT=8504 \
-    PI_WEB_DATA_DIR=/data/pi-web \
-    PI_WEB_SESSIOND_SOCKET=/data/pi-web/sessiond.sock \
-    PI_CODING_AGENT_DIR=/data/pi-agent
 
 ARG PI_WEB_VERSION=latest
 
-WORKDIR /
+ENV NIX_CONFIG="experimental-features = nix-command flakes" \
+    PATH="/nix/var/nix/profiles/runtime/bin:/usr/local/bin:/root/.nix-profile/bin:/usr/bin:/bin" \
+    HOME=/home/pi \
+    USER=pi \
+    LOGNAME=pi \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
-# Nix-managed toolchain + developer tools (see flake.nix).
-# Symlink the devEnv bins into /usr/local so they stay usable at runtime.
-# Use a dedicated /build dir: nix must not treat the whole / as its source.
-COPY flake.nix flake.lock /build/
-WORKDIR /build
-RUN mkdir -p /usr/local/bin \
- && ln -sf /root/.nix-profile/bin/bash /bin/bash \
- && dev="$(nix build .#devEnv --no-link --print-out-paths)" \
- && for f in "$dev"/bin/*; do ln -sf "$f" /usr/local/bin/; done \
- && rm -rf /build
-WORKDIR /
+COPY flake.nix flake.lock entrypoint.sh /usr/share/pi-web-container/
+COPY nix/ /usr/share/pi-web-container/nix/
+COPY seed/ /usr/share/pi-web-container/seed/
+RUN cd /usr/share/pi-web-container \
+ && HOME=/root nix profile add .#runtimeEnv .#entrypoint --profile /nix/var/nix/profiles/runtime \
+ && setup="$(nix build .#setup --no-link --print-out-paths)" \
+ && "$setup/bin/pi-web-container-setup" \
+ && nix-store --gc \
+ && rm -rf /root/.cache/nix /root/.local/state/nix
 
-# PI WEB plus its peer dependencies (including the bundled Pi agent).
-# The peer `pi` binary does not land on PATH, so we link it like upstream does.
-RUN npm install -g --allow-scripts=node-pty --no-audit --no-fund "@jmfederico/pi-web@${PI_WEB_VERSION}" \
- && ln -sf /usr/local/lib/node_modules/@jmfederico/pi-web/node_modules/.bin/pi /usr/local/bin/pi
+RUN HOME=/root npm install -g --prefix /usr/local --no-audit --no-fund \
+      "@agegr/pi-web@${PI_WEB_VERSION}" \
+ && rm -rf /root/.npm
 
-COPY entrypoint.sh /usr/local/bin/pi-web-entrypoint
-RUN chmod +x /usr/local/bin/pi-web-entrypoint
-
-# Run as root inside a ROOTLESS container: container uid 0 maps to the host
-# non-root user, so nix can write /nix/store to install packages without ever
-# gaining host root. With a rootful runtime this would be real root - keep rootless.
-
-# Single-process-friendly container: session daemon runs in the background,
-# the web server stays in the foreground so podman/docker manage its lifetime.
-CMD ["/usr/local/bin/pi-web-entrypoint"]
+WORKDIR /home/pi
+EXPOSE 30141 6767
+CMD ["/nix/var/nix/profiles/runtime/bin/pi-web-entrypoint"]
