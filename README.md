@@ -62,7 +62,7 @@ podman compose exec pi-web pi config
 
 ## Virtual desktop
 
-Xvfb and Fluxbox run on `DISPLAY=:0`. Playwright MCP uses the Nix-provided Chromium in headed mode without requiring a physical display.
+Xvfb and Fluxbox run on `DISPLAY=:0`. Playwright MCP uses the Nix-provided Chromium without an explicit head mode, so its headed default follows the available X display. MCP browser sessions use `--isolated`, keeping each temporary profile separate and discarding it after the session.
 
 noVNC is disabled by default. To enable browser access to the virtual desktop, set:
 
