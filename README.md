@@ -2,7 +2,7 @@
 
 A rootless Podman/Docker container running:
 
-- [PI Web](https://github.com/agegr/pi-web): browser UI for Pi sessions
+- [PI Web](https://github.com/canoziia/pi-web): browser UI for Pi sessions
 - [Paseo](https://paseo.sh): Web, mobile, desktop, and CLI access to coding agents
 - [Pi](https://github.com/earendil-works/pi): coding agent used by both services
 
@@ -95,6 +95,8 @@ Common options:
 | Variable | Purpose |
 | --- | --- |
 | `PI_WEB_IMAGE` | Container image |
+| `PI_WEB_REPOSITORY` | PI Web Git repository used for local image builds |
+| `PI_WEB_REF` | PI Web branch, tag, or commit used for local image builds |
 | `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
 | `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
 | `PI_WEB_PORT` | Bridge-mode PI Web host port |
@@ -142,13 +144,14 @@ docker compose up -d
 
 ## Build locally
 
-Uncomment the `build:` block in `compose.yml`, then run:
+The build configuration is included in `compose.yml`:
 
 ```bash
-podman compose up -d --build
+podman compose build
+podman compose up -d
 ```
 
-`PI_WEB_VERSION` controls the npm version of `@agegr/pi-web`; the Dockerfile default is `latest`.
+The Dockerfile fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, builds PI Web, creates an npm tarball, and installs it globally under `/usr/local`. The defaults use the `main` branch of `canoziia/pi-web`.
 
 ## Stop
 

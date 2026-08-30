@@ -6,7 +6,8 @@ services:
     build:
       context: .
       args:
-        PI_WEB_VERSION: ${PI_WEB_VERSION:-latest}
+        PI_WEB_REPOSITORY: ${PI_WEB_REPOSITORY:-https://github.com/canoziia/pi-web.git}
+        PI_WEB_REF: ${PI_WEB_REF:-main}
     restart: unless-stopped
     env_file:
       - .env
