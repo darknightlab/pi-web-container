@@ -175,7 +175,15 @@ podman compose build
 podman compose up -d
 ```
 
-The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, adds only Pi and Paseo through Nix, then fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, builds PI Web, creates an npm tarball, and installs it globally under `/usr/local`. The defaults use the `main` branch of `canoziia/pi-web`.
+The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, then builds, packs, and installs PI Web globally under `/usr/local`. Pi follows npm's `latest` tag and Paseo follows npm's `beta` tag; the repository-owned `npm/runtime/package-lock.json` pins their resolved versions and complete dependency graph for reproducible image builds. The defaults use the `main` branch of `canoziia/pi-web`.
+
+To update the pinned agent runtime intentionally:
+
+```bash
+cd npm/runtime
+rm package-lock.json
+npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+```
 
 ## Stop
 

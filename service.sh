@@ -50,11 +50,13 @@ start_pi_web() {
 }
 
 start_paseo() {
+  local entry=/usr/local/lib/pi-web-container/runtime/node_modules/@getpaseo/server/dist/scripts/supervisor-entrypoint.js
   cd "$HOME"
   exec env \
     PASEO_LISTEN="${CONTAINER_BIND_ADDR:-127.0.0.1}:6767" \
+    PASEO_NODE_ENV=production \
     PASEO_WEB_UI_ENABLED=true \
-    paseo-server
+    node "$entry"
 }
 
 pair_paseo() {

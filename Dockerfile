@@ -1,14 +1,12 @@
 FROM ghcr.io/canoziia/agent-infra-container:nix
 
-COPY flake.nix flake.lock /usr/share/pi-web-container/
-COPY nix/ /usr/share/pi-web-container/nix/
-WORKDIR /usr/share/pi-web-container
-RUN export HOME=/root \
- && nix profile add .#runtimeEnv --profile /nix/var/nix/profiles/runtime \
- && setup="$(nix build .#setup --no-link --print-out-paths)" \
- && "$setup/bin/pi-web-container-setup" \
- && nix-store --gc \
- && rm -rf /root/.cache/nix /root/.local/state/nix
+RUN { printf 'pi:x:0:0:PI container user:/home/pi:/nix/var/nix/profiles/runtime/bin/bash\n'; cat /etc/passwd; } > /tmp/passwd \
+ && mv /tmp/passwd /etc/passwd \
+ && { printf 'pi:x:0:\n'; cat /etc/group; } > /tmp/group \
+ && mv /tmp/group /etc/group \
+ && printf '\npi ALL=(ALL:ALL) NOPASSWD: ALL\n' >> /etc/sudoers \
+ && chmod 440 /etc/sudoers \
+ && install -d -m 700 /home/pi
 
 ARG PI_WEB_REPOSITORY=https://github.com/canoziia/pi-web.git
 ARG PI_WEB_REF=main
@@ -22,9 +20,19 @@ RUN mkdir -p /tmp/pi-web-package \
  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund \
  && NEXT_TELEMETRY_DISABLED=1 npm run build \
  && npm pack --pack-destination /tmp/pi-web-package \
- && HOME=/root npm install -g --prefix /usr/local --no-audit --no-fund \
+ && npm install -g --prefix /usr/local --no-audit --no-fund \
       /tmp/pi-web-package/*.tgz \
  && rm -rf /tmp/pi-web-src /tmp/pi-web-package /root/.npm
+
+COPY npm/runtime/package.json npm/runtime/package-lock.json /usr/local/lib/pi-web-container/runtime/
+WORKDIR /usr/local/lib/pi-web-container/runtime
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+ && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/pi /usr/local/bin/pi \
+ && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/paseo /usr/local/bin/paseo \
+ && pi --version \
+ && paseo --version \
+ && node -e 'const { createRequire } = require("node:module"); const req = createRequire("/usr/local/lib/pi-web-container/runtime/node_modules/@getpaseo/server/package.json"); if (typeof req("node-pty").spawn !== "function") process.exit(1)' \
+ && rm -rf /root/.npm
 
 ENV HOME=/home/pi \
     USER=pi \
