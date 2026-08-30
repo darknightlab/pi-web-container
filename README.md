@@ -3,10 +3,10 @@
 A rootless Podman/Docker container running:
 
 - [PI Web](https://github.com/canoziia/pi-web): browser UI for Pi sessions
-- [Paseo](https://paseo.sh): Web, mobile, desktop, and CLI access to coding agents
+- [Paseo](https://paseo.sh): optional Web, mobile, desktop, and CLI access to coding agents
 - [Pi](https://github.com/earendil-works/pi): coding agent used by both services
 
-PI Web and Paseo share the same Pi configuration and sessions.
+When enabled, Paseo shares the same Pi configuration and sessions as PI Web.
 
 ## Start
 
@@ -60,7 +60,7 @@ podman compose exec pi-web pi config
 
 ## Paseo
 
-Open <http://127.0.0.1:6767> for the Paseo Web UI.
+Open <http://127.0.0.1:6767> for the Paseo Web UI. To run PI Web without Paseo, set `PASEO_ENABLED=false` in `.env`; this skips the server and first-run pairing without deleting existing Paseo data.
 
 On first start, the container log prints a pairing QR code and link for the Paseo mobile or desktop app:
 
@@ -101,6 +101,7 @@ Common options:
 | `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
 | `PI_WEB_PORT` | Bridge-mode PI Web host port |
 | `PASEO_PORT` | Bridge-mode Paseo host port |
+| `PASEO_ENABLED` | Enable the Paseo server and first-run pairing; defaults to `true` |
 | `PI_WEB_PASSWORD` | PI Web Basic Auth password; username is `pi` |
 | `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames |
 | `PASEO_PASSWORD` | Paseo direct-connection password |

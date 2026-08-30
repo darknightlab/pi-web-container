@@ -3,8 +3,20 @@ set -uo pipefail
 
 state=/tmp/pi-web-container
 rm -rf "$state"
+
+paseo_setting=${PASEO_ENABLED:-true}
+case ${paseo_setting,,} in
+  1 | true | yes | on) paseo_enabled=1 ;;
+  0 | false | no | off) paseo_enabled=0 ;;
+  *)
+    echo "[entrypoint] Invalid PASEO_ENABLED value: $paseo_setting" >&2
+    exit 2
+    ;;
+esac
+
 install -d -m 700 "$HOME"
-mkdir -p "$state" "$HOME/.pi/agent" "$HOME/.paseo"
+mkdir -p "$state" "$HOME/.pi/agent"
+[ "$paseo_enabled" -eq 0 ] || mkdir -p "$HOME/.paseo"
 
 seed=/usr/share/pi-web-container/seed/pi-agent
 seed_state="$HOME/.pi/agent/.seed-state"
@@ -33,10 +45,17 @@ update_seed() {
   fi
 }
 
-for file in environment.md settings.json models.json mcp.json; do
+for file in settings.json models.json mcp.json; do
   update_seed "$file"
 done
 [ -e "$HOME/.pi/agent/instructions.md" ] || install -m 600 "$seed/instructions.md" "$HOME/.pi/agent/instructions.md"
+
+if ! node "$seed/environment.mjs" "$state/environment.md" "$paseo_enabled"; then
+  echo "[entrypoint] Failed to generate environment.md." >&2
+  exit 1
+fi
+install -m 600 "$state/environment.md" "$HOME/.pi/agent/environment.md"
+rm -f "$seed_state/environment.md.sha256"
 
 agents="$HOME/.pi/agent/AGENTS.md"
 candidate="$state/AGENTS.md"
@@ -97,14 +116,18 @@ shutdown() {
 }
 trap shutdown TERM INT
 
-supervise paseo env \
-  PASEO_LISTEN="$bind_addr:6767" \
-  PASEO_WEB_UI_ENABLED=true \
-  paseo-server &
+if [ "$paseo_enabled" -eq 1 ]; then
+  supervise paseo env \
+    PASEO_LISTEN="$bind_addr:6767" \
+    PASEO_WEB_UI_ENABLED=true \
+    paseo-server &
+  pair_once &
+else
+  echo "[entrypoint] Paseo is disabled."
+fi
 
 supervise pi-web env \
   PI_WEB_SKIP_VERSION_CHECK=1 \
   pi-web --hostname "$bind_addr" --port 30141 --no-open &
 
-pair_once &
 wait
