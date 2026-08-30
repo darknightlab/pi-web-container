@@ -77,11 +77,7 @@ for file in settings.json models.json mcp.json; do
 done
 [ -e "$HOME/.pi/agent/instructions.md" ] || install -m 600 "$seed/instructions.md" "$HOME/.pi/agent/instructions.md"
 
-if ! node "$seed/environment.mjs" \
-  "$state/environment.md" \
-  "$paseo_enabled" \
-  "$novnc_enabled" \
-  "$DISPLAY"; then
+if ! node "$seed/environment.mjs" "$state/environment.md" "$paseo_enabled"; then
   echo "[entrypoint] Failed to generate environment.md." >&2
   exit 1
 fi
