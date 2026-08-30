@@ -15,5 +15,6 @@ services:
     # ports:
     #   - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PI_WEB_PORT:-30141}:30141"
     #   - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PASEO_PORT:-6767}:6767"
+    #   - "${NOVNC_PUBLISH_ADDR:-127.0.0.1}:${NOVNC_PORT:-6080}:${NOVNC_PORT:-6080}"
     volumes:
       - ./data/home:/home

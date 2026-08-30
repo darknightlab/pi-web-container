@@ -1,13 +1,9 @@
 {
-  description = "PI Web + Paseo container runtime";
+  description = "PI Web + Paseo application runtime";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     paseo.url = "github:getpaseo/paseo";
-    nix-index-database = {
-      url = "github:nix-community/nix-index-database";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
@@ -31,7 +27,7 @@
           };
         in
         {
-          inherit (container) runtimeEnv setup entrypoint;
+          inherit (container) runtimeEnv setup;
         }
       );
     };

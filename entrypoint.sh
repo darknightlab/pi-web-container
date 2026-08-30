@@ -1,21 +1,48 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
 state=/tmp/pi-web-container
 rm -rf "$state"
+install -d -m 700 "$state" "$state/supervisor.d"
 
-paseo_setting=${PASEO_ENABLED:-true}
-case ${paseo_setting,,} in
-  1 | true | yes | on) paseo_enabled=1 ;;
-  0 | false | no | off) paseo_enabled=0 ;;
-  *)
-    echo "[entrypoint] Invalid PASEO_ENABLED value: $paseo_setting" >&2
+parse_bool() {
+  local name=$1
+  local value=$2
+  case ${value,,} in
+    1 | true | yes | on) printf '1' ;;
+    0 | false | no | off) printf '0' ;;
+    *)
+      echo "[entrypoint] Invalid $name value: $value" >&2
+      exit 2
+      ;;
+  esac
+}
+
+validate_port() {
+  local name=$1
+  local value=$2
+  if ! [[ $value =~ ^[0-9]+$ ]] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+    echo "[entrypoint] Invalid $name value: $value" >&2
     exit 2
-    ;;
-esac
+  fi
+}
+
+paseo_enabled=$(parse_bool PASEO_ENABLED "${PASEO_ENABLED:-true}")
+novnc_enabled=$(parse_bool NOVNC_ENABLED "${NOVNC_ENABLED:-false}")
+
+export DISPLAY=${DISPLAY:-:0}
+export XVFB_RESOLUTION=${XVFB_RESOLUTION:-1920x1080x24}
+if ! [[ $DISPLAY =~ ^:[0-9]+$ ]]; then
+  echo "[entrypoint] DISPLAY must be a local display such as :0: $DISPLAY" >&2
+  exit 2
+fi
+if ! [[ $XVFB_RESOLUTION =~ ^[1-9][0-9]*x[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+  echo "[entrypoint] Invalid XVFB_RESOLUTION value: $XVFB_RESOLUTION" >&2
+  exit 2
+fi
 
 install -d -m 700 "$HOME"
-mkdir -p "$state" "$HOME/.pi/agent"
+mkdir -p "$HOME/.pi/agent"
 [ "$paseo_enabled" -eq 0 ] || mkdir -p "$HOME/.paseo"
 
 seed=/usr/share/pi-web-container/seed/pi-agent
@@ -50,7 +77,11 @@ for file in settings.json models.json mcp.json; do
 done
 [ -e "$HOME/.pi/agent/instructions.md" ] || install -m 600 "$seed/instructions.md" "$HOME/.pi/agent/instructions.md"
 
-if ! node "$seed/environment.mjs" "$state/environment.md" "$paseo_enabled"; then
+if ! node "$seed/environment.mjs" \
+  "$state/environment.md" \
+  "$paseo_enabled" \
+  "$novnc_enabled" \
+  "$DISPLAY"; then
   echo "[entrypoint] Failed to generate environment.md." >&2
   exit 1
 fi
@@ -69,65 +100,91 @@ fi
 install -m 600 "$candidate" "$agents"
 rm -f "$seed_state/AGENTS.md.sha256"
 
-cd "$HOME"
-bind_addr=${CONTAINER_BIND_ADDR:-127.0.0.1}
-
-supervise() {
-  local name=$1
-  shift
-  while [ ! -e "$state/stop" ]; do
-    "$@" &
-    echo $! > "$state/$name.pid"
-    wait $!
-    rm -f "$state/$name.pid"
-    [ -e "$state/stop" ] || sleep "${CONTAINER_RESTART_DELAY:-3}"
-  done
-}
-
-pair_once() {
-  local marker="$HOME/.paseo/.pairing-shown"
-  [ -e "$marker" ] && return
-
-  for _ in $(seq 1 60); do
-    if curl -fsS -m 2 -o /dev/null http://127.0.0.1:6767/api/health; then
-      if paseo daemon pair --relay; then
-        touch "$marker"
-      fi
-      return
-    fi
-    sleep 1
-  done
-  echo "[entrypoint] Paseo did not become ready; pairing code was not printed." >&2
-}
-
-shutdown() {
-  touch "$state/stop"
-  local file pid
-  for file in "$state"/*.pid; do
-    [ -e "$file" ] || continue
-    pid=$(cat "$file")
-    kill "$pid" 2>/dev/null || true
-  done
-  for pid in $(jobs -p); do
-    kill "$pid" 2>/dev/null || true
-  done
-  wait
-  exit 0
-}
-trap shutdown TERM INT
-
 if [ "$paseo_enabled" -eq 1 ]; then
-  supervise paseo env \
-    PASEO_LISTEN="$bind_addr:6767" \
-    PASEO_WEB_UI_ENABLED=true \
-    paseo-server &
-  pair_once &
+  cat > "$state/supervisor.d/paseo.conf" <<'EOF'
+[program:paseo]
+command=/usr/local/libexec/pi-web-container/service paseo
+priority=30
+autostart=true
+autorestart=true
+startsecs=3
+startretries=30
+stopsignal=TERM
+stopwaitsecs=20
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+
+[program:paseo-pair]
+command=/usr/local/libexec/pi-web-container/service paseo-pair
+priority=40
+autostart=true
+autorestart=false
+startsecs=0
+startretries=0
+exitcodes=0
+stopsignal=TERM
+stopwaitsecs=5
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+EOF
 else
   echo "[entrypoint] Paseo is disabled."
 fi
 
-supervise pi-web env \
-  PI_WEB_SKIP_VERSION_CHECK=1 \
-  pi-web --hostname "$bind_addr" --port 30141 --no-open &
+if [ "$novnc_enabled" -eq 1 ]; then
+  : "${VNC_PASSWORD:?[entrypoint] VNC_PASSWORD is required when NOVNC_ENABLED=true.}"
+  if [ "${#VNC_PASSWORD}" -lt 8 ]; then
+    echo "[entrypoint] VNC_PASSWORD must contain at least eight bytes." >&2
+    exit 2
+  fi
+  export NOVNC_BIND_ADDR=${NOVNC_BIND_ADDR:-127.0.0.1}
+  export NOVNC_PORT=${NOVNC_PORT:-6080}
+  export VNC_INTERNAL_PORT=${VNC_INTERNAL_PORT:-5900}
+  validate_port NOVNC_PORT "$NOVNC_PORT"
+  validate_port VNC_INTERNAL_PORT "$VNC_INTERNAL_PORT"
+  printf '%s\n' "$VNC_PASSWORD" > "$state/vnc-password"
+  chmod 600 "$state/vnc-password"
+  unset VNC_PASSWORD
 
-wait
+  cat > "$state/supervisor.d/novnc.conf" <<'EOF'
+[program:x11vnc]
+command=/usr/local/libexec/pi-web-container/service x11vnc
+priority=30
+autostart=true
+autorestart=true
+startsecs=1
+startretries=30
+stopsignal=TERM
+stopwaitsecs=10
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+
+[program:novnc]
+command=/usr/local/libexec/pi-web-container/service novnc
+priority=40
+autostart=true
+autorestart=true
+startsecs=1
+startretries=30
+stopsignal=TERM
+stopwaitsecs=10
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+EOF
+else
+  echo "[entrypoint] noVNC is disabled."
+fi
+
+exec supervisord -c /etc/supervisord.conf

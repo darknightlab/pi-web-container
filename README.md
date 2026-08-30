@@ -5,8 +5,10 @@ A rootless Podman/Docker container running:
 - [PI Web](https://github.com/canoziia/pi-web): browser UI for Pi sessions
 - [Paseo](https://paseo.sh): optional Web, mobile, desktop, and CLI access to coding agents
 - [Pi](https://github.com/earendil-works/pi): coding agent used by both services
+- A persistent Xvfb/Fluxbox desktop for headed Chromium and Playwright MCP
+- Optional password-protected noVNC access to the virtual desktop
 
-When enabled, Paseo shares the same Pi configuration and sessions as PI Web.
+When enabled, Paseo shares the same Pi configuration and sessions as PI Web. The application image builds on `ghcr.io/canoziia/agent-infra-container:nix`.
 
 ## Start
 
@@ -58,6 +60,20 @@ podman compose exec pi-web pi --list-models
 podman compose exec pi-web pi config
 ```
 
+## Virtual desktop
+
+Xvfb and Fluxbox run on `DISPLAY=:0`. Playwright MCP uses the Nix-provided Chromium in headed mode without requiring a physical display.
+
+noVNC is disabled by default. To enable browser access to the virtual desktop, set:
+
+```dotenv
+NOVNC_ENABLED=true
+NOVNC_BIND_ADDR=127.0.0.1
+VNC_PASSWORD=change-me
+```
+
+Then open <http://127.0.0.1:6080/vnc.html>. The raw VNC server always binds to loopback and Compose never publishes it. With host networking it is host-local on port 5900; change `VNC_INTERNAL_PORT` if that port is already occupied. For remote noVNC access, use a protected tunnel. For bridge networking, set `NOVNC_BIND_ADDR=0.0.0.0` and publish port 6080.
+
 ## Paseo
 
 Open <http://127.0.0.1:6767> for the Paseo Web UI. To run PI Web without Paseo, set `PASEO_ENABLED=false` in `.env`; this skips the server and first-run pairing without deleting existing Paseo data.
@@ -102,13 +118,20 @@ Common options:
 | `PI_WEB_PORT` | Bridge-mode PI Web host port |
 | `PASEO_PORT` | Bridge-mode Paseo host port |
 | `PASEO_ENABLED` | Enable the Paseo server and first-run pairing; defaults to `true` |
+| `DISPLAY` | Virtual X display; defaults to `:0` |
+| `XVFB_RESOLUTION` | Virtual desktop resolution and depth; defaults to `1920x1080x24` |
+| `NOVNC_ENABLED` | Enable x11vnc and noVNC; defaults to `false` |
+| `NOVNC_BIND_ADDR` | noVNC listen address; defaults to `127.0.0.1` |
+| `NOVNC_PORT` | noVNC listen port and bridge-mode container port; defaults to `6080` |
+| `NOVNC_PUBLISH_ADDR` | Bridge-mode host publish address for noVNC |
+| `VNC_INTERNAL_PORT` | Loopback-only raw VNC port; defaults to `5900` and is never published by Compose |
+| `VNC_PASSWORD` | Required and at least eight bytes when noVNC is enabled; classic VNC uses only the first eight bytes |
 | `PI_WEB_PASSWORD` | PI Web Basic Auth password; username is `pi` |
 | `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames |
 | `PASEO_PASSWORD` | Paseo direct-connection password |
 | `PASEO_HOSTNAMES` | Additional Paseo hostnames |
 | `PASEO_RELAY_ENDPOINT` | Custom relay endpoint in `host:port` form |
 | `PASEO_RELAY_USE_TLS` | Set to `true` for a custom TLS relay |
-| `CONTAINER_RESTART_DELAY` | Delay before restarting a failed service |
 
 For a custom relay:
 
@@ -152,7 +175,7 @@ podman compose build
 podman compose up -d
 ```
 
-The Dockerfile fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, builds PI Web, creates an npm tarball, and installs it globally under `/usr/local`. The defaults use the `main` branch of `canoziia/pi-web`.
+The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, adds only Pi and Paseo through Nix, then fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, builds PI Web, creates an npm tarball, and installs it globally under `/usr/local`. The defaults use the `main` branch of `canoziia/pi-web`.
 
 ## Stop
 
@@ -162,7 +185,7 @@ podman compose down
 
 ## Security
 
-Both services can run coding agents with access to the mounted home directory. Host mode binds both services to loopback by default. For remote access, set both passwords and use HTTPS, Tailscale, or an SSH tunnel.
+PI Web, Paseo, and noVNC can access or control processes with access to the mounted home directory. Host mode binds all enabled services to loopback by default. For remote access, set the relevant passwords and use HTTPS, Cloudflare Access, Tailscale, or an SSH tunnel. Never expose raw VNC port 5900.
 
 ## Licenses
 
