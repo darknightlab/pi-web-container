@@ -15,6 +15,7 @@ const content = `# Container Environment
 You are running inside the [\`pi-web-container\`](https://github.com/darknightlab/pi-web-container) development container. ${servicesDescription}
 
 - This container uses Nix for its runtime environment and development tools.
+- Graphical applications can use the container's virtual display.
 - The default login name is \`pi\`; \`pi\` and \`root\` share uid 0.
 - Use \`$USER\` and \`$HOME\` to distinguish login identities. \`whoami\` always reports \`pi\` because it resolves the first uid-0 entry.
 - Persistent user data lives under \`/home\`.
