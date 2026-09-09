@@ -54,7 +54,7 @@ start_pi_web() {
   exec env PI_WEB_SKIP_VERSION_CHECK=1 \
     pi-web \
       --hostname "${CONTAINER_BIND_ADDR:-127.0.0.1}" \
-      --port 30141 \
+      --port "$PI_WEB_PORT" \
       --no-open
 }
 
@@ -62,7 +62,7 @@ start_paseo() {
   local entry=/usr/local/lib/pi-web-container/runtime/node_modules/@getpaseo/server/dist/scripts/supervisor-entrypoint.js
   cd "$HOME"
   exec env \
-    PASEO_LISTEN="${CONTAINER_BIND_ADDR:-127.0.0.1}:6767" \
+    PASEO_LISTEN="${CONTAINER_BIND_ADDR:-127.0.0.1}:$PASEO_PORT" \
     PASEO_NODE_ENV=production \
     PASEO_WEB_UI_ENABLED=true \
     node "$entry"
@@ -73,7 +73,7 @@ pair_paseo() {
   [ -e "$marker" ] && exit 0
 
   for _ in $(seq 1 60); do
-    if curl -fsS -m 2 -o /dev/null http://127.0.0.1:6767/api/health; then
+    if curl -fsS -m 2 -o /dev/null "http://127.0.0.1:$PASEO_PORT/api/health"; then
       if paseo daemon pair --relay; then
         touch "$marker"
       fi

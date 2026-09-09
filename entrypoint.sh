@@ -37,6 +37,11 @@ validate_port() {
 paseo_enabled=$(parse_bool PASEO_ENABLED "${PASEO_ENABLED:-true}")
 novnc_enabled=$(parse_bool NOVNC_ENABLED "${NOVNC_ENABLED:-false}")
 
+export PI_WEB_PORT=${PI_WEB_PORT:-30141}
+export PASEO_PORT=${PASEO_PORT:-6767}
+validate_port PI_WEB_PORT "$PI_WEB_PORT"
+validate_port PASEO_PORT "$PASEO_PORT"
+
 export DISPLAY=${DISPLAY:-:0}
 export XVFB_RESOLUTION=${XVFB_RESOLUTION:-1920x1080x24}
 if ! [[ $DISPLAY =~ ^:[0-9]+$ ]]; then

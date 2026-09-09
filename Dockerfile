@@ -68,5 +68,4 @@ RUN chmod 755 /usr/local/bin/pi-web-entrypoint \
               /usr/local/libexec/pi-web-container/service
 
 WORKDIR /home/pi
-EXPOSE 30141 6080 6767
 CMD ["/usr/local/bin/pi-web-entrypoint"]
