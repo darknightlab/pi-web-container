@@ -1,0 +1,47 @@
+From 0eda70d86a5ce74e650a0a384fe2c88a0747cb43 Mon Sep 17 00:00:00 2001
+From: Canoziia <canoziia@projectk.org>
+Date: Sun, 30 Aug 2026 14:09:41 +0800
+Subject: [PATCH] fix: preserve streaming message on session resume
+
+---
+ hooks/useAgentSession.ts | 2 +-
+ lib/streaming-message.ts | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/hooks/useAgentSession.ts b/hooks/useAgentSession.ts
+index efd2b81..b0d8ef6 100644
+--- a/hooks/useAgentSession.ts
++++ b/hooks/useAgentSession.ts
+@@ -1906,7 +1906,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
+             agentRunningRef.current = true;
+             setAgentRunning(true);
+             setAgentPhase(agentState.state.isStreaming ? { kind: "waiting_model" } : { kind: "running_command" });
+-            dispatch({ type: "start" });
++            dispatch({ type: "resume" });
+             void maintainEventsConnected(session.id);
+             if (!agentState.state.isStreaming && agentState.state.isPromptRunning) {
+               void waitForPromptSettlement(session.id);
+diff --git a/lib/streaming-message.ts b/lib/streaming-message.ts
+index 8fb1026..f9744f5 100644
+--- a/lib/streaming-message.ts
++++ b/lib/streaming-message.ts
+@@ -15,6 +15,7 @@ export interface StreamingState {
+ 
+ export type StreamAction =
+   | { type: "start" }
++  | { type: "resume" }
+   | { type: "snapshot"; message: AgentMessage }
+   | { type: "delta"; event: ClientAssistantMessageEvent }
+   | { type: "end" };
+@@ -128,6 +129,8 @@ export function streamReducer(
+   switch (action.type) {
+     case "start":
+       return { isStreaming: true, streamingMessage: null };
++    case "resume":
++      return { ...state, isStreaming: true };
+     case "snapshot": {
+       const message = normalizeStreamingToolCalls(action.message);
+       return message.role === "assistant"
+-- 
+2.55.0
+

@@ -7,8 +7,8 @@ if (!outputPath || !["0", "1"].includes(paseoValue)) {
 }
 
 const servicesDescription = paseoValue === "1"
-  ? "It runs [`pi-web`](https://github.com/canoziia/pi-web) for browser-based Pi sessions and [`paseo`](https://github.com/getpaseo/paseo) for remote and mobile agent orchestration."
-  : "It runs [`pi-web`](https://github.com/canoziia/pi-web) for browser-based Pi sessions.";
+  ? "It runs [`pi-web`](https://github.com/agegr/pi-web) for browser-based Pi sessions and [`paseo`](https://github.com/getpaseo/paseo) for remote and mobile agent orchestration."
+  : "It runs [`pi-web`](https://github.com/agegr/pi-web) for browser-based Pi sessions.";
 
 const content = `# Container Environment
 

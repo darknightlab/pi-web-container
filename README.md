@@ -2,7 +2,7 @@
 
 A rootless Podman/Docker container running:
 
-- [PI Web](https://github.com/canoziia/pi-web): browser UI for Pi sessions
+- [PI Web](https://github.com/agegr/pi-web): browser UI for Pi sessions
 - [Paseo](https://paseo.sh): optional Web, mobile, desktop, and CLI access to coding agents
 - [Pi](https://github.com/earendil-works/pi): coding agent used by both services
 - A persistent Xvfb/Fluxbox desktop for headed Chromium and Playwright MCP
@@ -111,8 +111,6 @@ Common options:
 | Variable | Purpose |
 | --- | --- |
 | `PI_WEB_IMAGE` | Container image |
-| `PI_WEB_REPOSITORY` | PI Web Git repository used for local image builds |
-| `PI_WEB_REF` | PI Web branch, tag, or commit used for local image builds |
 | `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
 | `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
 | `PI_WEB_PORT` | Bridge-mode PI Web host port |
@@ -175,7 +173,11 @@ podman compose build
 podman compose up -d
 ```
 
-The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, fetches `PI_WEB_REPOSITORY` at `PI_WEB_REF`, then builds, packs, and installs PI Web globally under `/usr/local`. Pi follows npm's `latest` tag and Paseo follows npm's `beta` tag; the repository-owned `npm/runtime/package-lock.json` pins their resolved versions and complete dependency graph for reproducible image builds. The defaults use the `main` branch of `canoziia/pi-web`.
+The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, fetches the official `agegr/pi-web` repository at the `main` ref, applies every `*.patch` file from the repository-owned `patches/pi-web/` directory, then builds, packs, and installs PI Web globally under `/usr/local`. This keeps local fixes as small, rebaseable patches instead of a long-lived fork. Pi follows npm's `latest` tag and Paseo follows npm's `beta` tag; the repository-owned `npm/runtime/package-lock.json` pins their resolved versions and complete dependency graph for reproducible image builds.
+
+The defaults use the `main` branch of `agegr/pi-web`. If an upstream change makes a patch fail to apply, the build stops so you can rebase it. Currently applied patches:
+
+- `0001-preserve-streaming-message-on-session-resume.patch` — preserve an in-flight streaming message when resuming a session.
 
 To update the pinned agent runtime intentionally:
 

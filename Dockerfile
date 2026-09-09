@@ -8,15 +8,22 @@ RUN { printf 'pi:x:0:0:PI container user:/home/pi:/nix/var/nix/profiles/runtime/
  && chmod 440 /etc/sudoers \
  && install -d -m 700 /home/pi
 
-ARG PI_WEB_REPOSITORY=https://github.com/canoziia/pi-web.git
+# Build PI Web from the official source, then apply the repository-owned
+# patches/pi-web/ directory on top so any local fixes can follow upstream cleanly.
+ARG PI_WEB_REPOSITORY=https://github.com/agegr/pi-web.git
 ARG PI_WEB_REF=main
 
+COPY patches/pi-web/ /tmp/pi-web-patches/
 WORKDIR /tmp/pi-web-src
 RUN mkdir -p /tmp/pi-web-package \
  && git -C /tmp/pi-web-src init \
  && git -C /tmp/pi-web-src remote add origin "$PI_WEB_REPOSITORY" \
  && git -C /tmp/pi-web-src fetch --depth=1 origin "$PI_WEB_REF" \
  && git -C /tmp/pi-web-src checkout --detach FETCH_HEAD \
+ && for patch in /tmp/pi-web-patches/*.patch; do \
+        [ -e "$patch" ] || continue; \
+        git -C /tmp/pi-web-src apply --whitespace=nowarn "$patch" || exit 1; \
+      done \
  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund \
  && NEXT_TELEMETRY_DISABLED=1 npm run build \
  && npm pack --pack-destination /tmp/pi-web-package \
