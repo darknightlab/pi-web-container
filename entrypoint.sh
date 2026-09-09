@@ -5,6 +5,13 @@ state=/tmp/pi-web-container
 rm -rf "$state"
 install -d -m 700 "$state" "$state/supervisor.d"
 
+# Every supervised desktop process, including Cua Driver MCP processes spawned
+# by Pi, inherits this session bus. AT-SPI is activated on demand through the
+# D-Bus service files provided by the base image.
+export XDG_RUNTIME_DIR="$state/runtime"
+install -d -m 700 "$XDG_RUNTIME_DIR"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$state/session-bus.sock"
+
 parse_bool() {
   local name=$1
   local value=$2

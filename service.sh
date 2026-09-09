@@ -3,6 +3,15 @@ set -euo pipefail
 
 state=/tmp/pi-web-container
 
+start_dbus() {
+  rm -f "${DBUS_SESSION_BUS_ADDRESS#unix:path=}"
+  exec dbus-daemon \
+    --session \
+    --nofork \
+    --nopidfile \
+    --address="$DBUS_SESSION_BUS_ADDRESS"
+}
+
 wait_for_x() {
   local display_number=${DISPLAY#:}
   local socket="/tmp/.X11-unix/X${display_number}"
@@ -97,6 +106,7 @@ start_novnc() {
 }
 
 case ${1:-} in
+  dbus) start_dbus ;;
   fluxbox) start_fluxbox ;;
   novnc) start_novnc ;;
   paseo) start_paseo ;;
@@ -105,7 +115,7 @@ case ${1:-} in
   x11vnc) start_x11vnc ;;
   xvfb) start_xvfb ;;
   *)
-    echo "Usage: $0 {xvfb|fluxbox|pi-web|paseo|paseo-pair|x11vnc|novnc}" >&2
+    echo "Usage: $0 {dbus|xvfb|fluxbox|pi-web|paseo|paseo-pair|x11vnc|novnc}" >&2
     exit 2
     ;;
 esac

@@ -1,5 +1,12 @@
 {
   "mcpServers": {
+    "cua-driver": {
+      "command": "/nix/var/nix/profiles/runtime/bin/cua-driver",
+      "args": ["mcp"],
+      "env": {
+        "CUA_DRIVER_PERMISSION_MODE": "standard"
+      }
+    },
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp", "--isolated"],

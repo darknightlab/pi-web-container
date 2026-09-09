@@ -5,7 +5,8 @@ A rootless Podman/Docker container running:
 - [PI Web](https://github.com/agegr/pi-web): browser UI for Pi sessions
 - [Paseo](https://paseo.sh): optional Web, mobile, desktop, and CLI access to coding agents
 - [Pi](https://github.com/earendil-works/pi): coding agent used by both services
-- A persistent Xvfb/Fluxbox desktop for headed Chromium and Playwright MCP
+- A persistent Xvfb/Fluxbox desktop with a D-Bus/AT-SPI accessibility session
+- [Cua Driver](https://github.com/trycua/cua) and Playwright MCP for desktop/browser automation
 - Optional password-protected noVNC access to the virtual desktop
 
 When enabled, Paseo shares the same Pi configuration and sessions as PI Web. The application image builds on `ghcr.io/canoziia/agent-infra-container:nix`.
@@ -73,6 +74,24 @@ VNC_PASSWORD=change-me
 ```
 
 Then open <http://127.0.0.1:6080/vnc.html>. The raw VNC server always binds to loopback and Compose never publishes it. With host networking it is host-local on port 5900; change `VNC_INTERNAL_PORT` if that port is already occupied. For remote noVNC access, use a protected tunnel. For bridge networking, set `NOVNC_BIND_ADDR=0.0.0.0` and publish port 6080.
+
+## Cua Driver
+
+Pi's seeded MCP configuration starts `cua-driver mcp` over stdio. On Linux this
+process owns its runtime directly and targets the container's X11 session through
+`DISPLAY=:0`. The runtime's shared D-Bus session allows compatible native apps
+to expose AT-SPI accessibility trees. Cua provides desktop screenshots, window
+discovery, semantic actions where supported, and mouse and keyboard actions
+alongside the browser-focused Playwright MCP server.
+
+The default Cua permission mode is `standard`. Existing Chromium profiles remain
+an explicit authorization boundary; use a reviewed bounded capability manifest
+for unattended access to sensitive resources. Do not switch to `unrestricted`
+unless the container is disposable or fully trusted and the full effect of every
+allowed action is acceptable.
+
+The base image installs Cua Driver but does not start it. Pi owns the MCP process,
+while this runtime image owns Xvfb/Fluxbox and service supervision.
 
 ## Paseo
 
