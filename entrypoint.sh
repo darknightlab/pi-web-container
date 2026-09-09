@@ -1,6 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+container_user=${CONTAINER_USER:-pi}
+if ! [[ $container_user =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+  echo "[entrypoint] Invalid CONTAINER_USER value: $container_user" >&2
+  exit 2
+fi
+if [ "$container_user" = root ]; then
+  echo "[entrypoint] CONTAINER_USER must not be root; use a separate login alias." >&2
+  exit 2
+fi
+
+export CONTAINER_USER=$container_user
+export HOME="/home/$container_user"
+export USER=$container_user
+export LOGNAME=$container_user
+
+# The process remains uid/gid 0 inside this development container. Add a
+# configurable login alias so tools display the requested identity and use its
+# own persistent home directory. /etc belongs to the container's writable layer,
+# so this setup is idempotent across restarts of the same container.
+passwd_entry="$container_user:x:0:0:PI container user:$HOME:/nix/var/nix/profiles/runtime/bin/bash"
+existing_passwd=$(grep -E "^$container_user:" /etc/passwd || true)
+if [ -n "$existing_passwd" ] && [ "$existing_passwd" != "$passwd_entry" ]; then
+  echo "[entrypoint] CONTAINER_USER already has an incompatible passwd entry: $container_user" >&2
+  exit 2
+fi
+if [ -z "$existing_passwd" ]; then
+  { printf '%s\n' "$passwd_entry"; cat /etc/passwd; } > /tmp/passwd
+  install -m 644 /tmp/passwd /etc/passwd
+  rm -f /tmp/passwd
+fi
+
+group_entry="$container_user:x:0:"
+existing_group=$(grep -E "^$container_user:" /etc/group || true)
+if [ -n "$existing_group" ] && [ "$existing_group" != "$group_entry" ]; then
+  echo "[entrypoint] CONTAINER_USER already has an incompatible group entry: $container_user" >&2
+  exit 2
+fi
+if [ -z "$existing_group" ]; then
+  { printf '%s\n' "$group_entry"; cat /etc/group; } > /tmp/group
+  install -m 644 /tmp/group /etc/group
+  rm -f /tmp/group
+fi
+
+sudoers_entry="$container_user ALL=(ALL:ALL) NOPASSWD: ALL"
+grep -Fqx "$sudoers_entry" /etc/sudoers || printf '\n%s\n' "$sudoers_entry" >> /etc/sudoers
+chmod 440 /etc/sudoers
+install -d -m 700 "$HOME"
+
 state=/tmp/pi-web-container
 rm -rf "$state"
 install -d -m 700 "$state" "$state/supervisor.d"

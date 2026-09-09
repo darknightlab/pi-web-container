@@ -8,6 +8,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      HOME: /home/${CONTAINER_USER:-pi}
+      USER: ${CONTAINER_USER:-pi}
+      LOGNAME: ${CONTAINER_USER:-pi}
+    working_dir: /home/${CONTAINER_USER:-pi}
     network_mode: host
     # ports:
     #   - "${PI_WEB_BIND_ADDR:-127.0.0.1}:${PI_WEB_PORT:-30141}:${PI_WEB_PORT:-30141}"

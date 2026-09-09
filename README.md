@@ -114,7 +114,7 @@ Useful commands:
 ```bash
 podman compose exec pi-web paseo daemon status
 podman compose exec pi-web paseo provider diagnostic pi
-podman compose exec pi-web paseo project create /home/pi
+podman compose exec pi-web sh -lc 'paseo project create "$HOME"'
 podman compose exec pi-web paseo run "your task"
 podman compose exec pi-web paseo ls -a -g
 ```
@@ -130,6 +130,7 @@ Common options:
 | Variable | Purpose |
 | --- | --- |
 | `PI_WEB_IMAGE` | Container image |
+| `CONTAINER_USER` | Login alias and home-directory name created by the entrypoint; defaults to `pi` |
 | `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
 | `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
 | `PI_WEB_PORT` | PI Web listen port; defaults to `30141` |
@@ -167,7 +168,7 @@ Compose mounts:
 ./data/home  ->  /home
 ```
 
-The default working directory is `/home/pi`. Back up `./data/home` to preserve Pi sessions, credentials, Paseo pairing state, settings, and projects.
+The entrypoint creates `/home/$CONTAINER_USER` on first start and exports it as `HOME`; the default is `/home/pi`. Changing `CONTAINER_USER` selects a different persistent home under the same volume. Back up `./data/home` to preserve Pi sessions, credentials, Paseo pairing state, settings, and projects.
 
 ## Update
 

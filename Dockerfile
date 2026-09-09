@@ -44,19 +44,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
  && node -e 'const { createRequire } = require("node:module"); const req = createRequire("/usr/local/lib/pi-web-container/runtime/node_modules/@getpaseo/server/package.json"); if (typeof req("node-pty").spawn !== "function") process.exit(1)' \
  && rm -rf /root/.npm
 
-# Runtime identity setup belongs after build/install layers so changes here do
-# not invalidate the expensive PI Web and npm dependency caches.
-RUN { printf 'pi:x:0:0:PI container user:/home/pi:/nix/var/nix/profiles/runtime/bin/bash\n'; cat /etc/passwd; } > /tmp/passwd \
- && mv /tmp/passwd /etc/passwd \
- && { printf 'pi:x:0:\n'; cat /etc/group; } > /tmp/group \
- && mv /tmp/group /etc/group \
- && printf '\npi ALL=(ALL:ALL) NOPASSWD: ALL\n' >> /etc/sudoers \
- && chmod 440 /etc/sudoers \
- && install -d -m 700 /home/pi
-
-ENV HOME=/home/pi \
-    USER=pi \
-    LOGNAME=pi \
+ENV CONTAINER_USER=pi \
     XDG_RUNTIME_DIR=/tmp/pi-web-container/runtime \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/pi-web-container/session-bus.sock
 
@@ -67,5 +55,5 @@ COPY seed/ /usr/share/pi-web-container/seed/
 RUN chmod 755 /usr/local/bin/pi-web-entrypoint \
               /usr/local/libexec/pi-web-container/service
 
-WORKDIR /home/pi
+WORKDIR /home
 CMD ["/usr/local/bin/pi-web-entrypoint"]

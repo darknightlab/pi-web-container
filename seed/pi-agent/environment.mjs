@@ -17,8 +17,8 @@ You are running inside the [\`pi-web-container\`](https://github.com/darknightla
 - This container uses Nix for its runtime environment and development tools.
 - Graphical applications can use the container's virtual display.
 - Pi can drive the X11 desktop through the seeded Cua Driver MCP server, inspect AT-SPI trees exposed by compatible native apps, and automate web pages through Playwright MCP.
-- The default login name is \`pi\`; \`pi\` and \`root\` share uid 0.
-- Use \`$USER\` and \`$HOME\` to distinguish login identities. \`whoami\` always reports \`pi\` because it resolves the first uid-0 entry.
+- The login name comes from \`CONTAINER_USER\` (default \`pi\`); that alias and \`root\` share uid 0.
+- Use \`$USER\` and \`$HOME\` to distinguish login identities. \`whoami\` resolves the configurable alias because its uid-0 passwd entry is first.
 - Persistent user data lives under \`/home\`.
 - Use \`su - root\` or \`sudo -i\` when a root login environment is specifically required; this does not change privileges because both names use uid 0.
 - Do not directly edit \`$HOME/.pi/agent/environment.md\` or \`$HOME/.pi/agent/AGENTS.md\`; the container entrypoint generates them. Put personal guidance in \`$HOME/.pi/agent/instructions.md\`.
