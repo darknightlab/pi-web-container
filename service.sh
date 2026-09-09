@@ -4,9 +4,21 @@ set -euo pipefail
 state=/tmp/pi-web-container
 
 start_dbus() {
-  rm -f "${DBUS_SESSION_BUS_ADDRESS#unix:path=}"
+  local config=/nix/var/nix/profiles/runtime/share/dbus-1/session.conf
+  local socket=${DBUS_SESSION_BUS_ADDRESS#unix:path=}
+
+  if [ "$socket" = "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    echo "[dbus] DBUS_SESSION_BUS_ADDRESS must use unix:path=: $DBUS_SESSION_BUS_ADDRESS" >&2
+    exit 2
+  fi
+  if [ ! -f "$config" ]; then
+    echo "[dbus] Session configuration is missing: $config" >&2
+    exit 1
+  fi
+
+  rm -f "$socket"
   exec dbus-daemon \
-    --session \
+    --config-file="$config" \
     --nofork \
     --nopidfile \
     --address="$DBUS_SESSION_BUS_ADDRESS"

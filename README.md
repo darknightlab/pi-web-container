@@ -63,7 +63,7 @@ podman compose exec pi-web pi config
 
 ## Virtual desktop
 
-Xvfb and Fluxbox run on `DISPLAY=:0`. Playwright MCP uses the Nix-provided Chromium without an explicit head mode, so its headed default follows the available X display. MCP browser sessions use `--isolated`, keeping each temporary profile separate and discarding it after the session.
+Xvfb and Fluxbox run on `DISPLAY=:0` by default. When host networking exposes a conflicting host X11/Xwayland abstract socket, select an unused display such as `DISPLAY=:99` in `.env`. Playwright MCP uses the Nix-provided Chromium without an explicit head mode, so its headed default follows the available X display. MCP browser sessions use `--isolated`, keeping each temporary profile separate and discarding it after the session.
 
 noVNC is disabled by default. To enable browser access to the virtual desktop, set:
 
@@ -79,7 +79,7 @@ Then open <http://127.0.0.1:6080/vnc.html>. The raw VNC server always binds to l
 
 Pi's seeded MCP configuration starts `cua-driver mcp` over stdio. On Linux this
 process owns its runtime directly and targets the container's X11 session through
-`DISPLAY=:0`. The runtime's shared D-Bus session allows compatible native apps
+the configured `DISPLAY`. The runtime's shared D-Bus session allows compatible native apps
 to expose AT-SPI accessibility trees. Cua provides desktop screenshots, window
 discovery, semantic actions where supported, and mouse and keyboard actions
 alongside the browser-focused Playwright MCP server.
@@ -132,10 +132,10 @@ Common options:
 | `PI_WEB_IMAGE` | Container image |
 | `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
 | `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
-| `PI_WEB_PORT` | Bridge-mode PI Web host port |
-| `PASEO_PORT` | Bridge-mode Paseo host port |
+| `PI_WEB_PORT` | PI Web listen port; defaults to `30141` |
+| `PASEO_PORT` | Paseo listen port; defaults to `6767` |
 | `PASEO_ENABLED` | Enable the Paseo server and first-run pairing; defaults to `true` |
-| `DISPLAY` | Virtual X display; defaults to `:0` |
+| `DISPLAY` | Virtual X display; defaults to `:0`; use an unused value such as `:99` if host networking causes a collision |
 | `XVFB_RESOLUTION` | Virtual desktop resolution and depth; defaults to `1920x1080x24` |
 | `NOVNC_ENABLED` | Enable x11vnc and noVNC; defaults to `false` |
 | `NOVNC_BIND_ADDR` | noVNC listen address; defaults to `127.0.0.1` |
