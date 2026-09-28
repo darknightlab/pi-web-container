@@ -132,10 +132,9 @@ update_seed() {
   fi
 }
 
-for file in settings.json models.json mcp.json; do
+for file in settings.json models.json mcp.json instructions.md; do
   update_seed "$file"
 done
-[ -e "$HOME/.pi/agent/instructions.md" ] || install -m 600 "$seed/instructions.md" "$HOME/.pi/agent/instructions.md"
 
 if ! node "$seed/environment.mjs" "$state/environment.md" "$paseo_enabled"; then
   echo "[entrypoint] Failed to generate environment.md." >&2

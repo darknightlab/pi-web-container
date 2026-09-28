@@ -51,7 +51,7 @@ A bridge container listening only on its own `127.0.0.1` cannot receive traffic 
 
 Open <http://127.0.0.1:30141> to browse and resume Pi sessions, configure models, inspect files, and use Git worktrees.
 
-A new home starts with anonymous OpenCode Free models and the same initial Pi package configuration shipped by this repository. Existing persistent Pi settings are preserved.
+A new home starts with anonymous OpenCode Free models and the same initial Pi package configuration shipped by this repository. The seeded `settings.json`, `models.json`, `mcp.json`, and `instructions.md` follow upstream image updates as long as you have not edited them; once you customize a file (or your persistent home predates the seed stamp), it is preserved and left untouched. `environment.md` and `AGENTS.md` are regenerated on every start from the generated environment plus your `instructions.md`.
 
 Useful commands:
 
