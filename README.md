@@ -51,7 +51,7 @@ A bridge container listening only on its own `127.0.0.1` cannot receive traffic 
 
 Open <http://127.0.0.1:30141> to browse and resume Pi sessions, configure models, inspect files, and use Git worktrees.
 
-A new home starts with anonymous OpenCode Free models and the same initial Pi package configuration shipped by this repository. The seeded `settings.json`, `models.json`, `mcp.json`, and `instructions.md` follow upstream image updates as long as you have not edited them; once you customize a file (or your persistent home predates the seed stamp), it is preserved and left untouched. `environment.md` and `AGENTS.md` are regenerated on every start from the generated environment plus your `instructions.md`.
+A new home starts with anonymous OpenCode Free models and the same initial Pi package configuration shipped by this repository. The seeded `settings.json`, `models.json`, `mcp-adapter.json`, and `instructions.md` follow upstream image updates as long as you have not edited them; once you customize a file (or your persistent home predates the seed stamp), it is preserved and left untouched. `environment.md` and `AGENTS.md` are regenerated on every start from the generated environment plus your `instructions.md`.
 
 Useful commands:
 
@@ -127,29 +127,29 @@ Edit `.env` before starting the container.
 
 Common options:
 
-| Variable | Purpose |
-| --- | --- |
-| `PI_WEB_IMAGE` | Container image |
-| `CONTAINER_USER` | Login alias and home-directory name created by the entrypoint; defaults to `pi` |
-| `CONTAINER_BIND_ADDR` | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode |
-| `PI_WEB_BIND_ADDR` | Bridge-mode host publish address |
-| `PI_WEB_PORT` | PI Web listen port; defaults to `30141` |
-| `PASEO_PORT` | Paseo listen port; defaults to `6767` |
-| `PASEO_ENABLED` | Enable the Paseo server and first-run pairing; defaults to `true` |
-| `DISPLAY` | Virtual X display; defaults to `:0`; use an unused value such as `:99` if host networking causes a collision |
-| `XVFB_RESOLUTION` | Virtual desktop resolution and depth; defaults to `1920x1080x24` |
-| `NOVNC_ENABLED` | Enable x11vnc and noVNC; defaults to `false` |
-| `NOVNC_BIND_ADDR` | noVNC listen address; defaults to `127.0.0.1` |
-| `NOVNC_PORT` | noVNC listen port and bridge-mode container port; defaults to `6080` |
-| `NOVNC_PUBLISH_ADDR` | Bridge-mode host publish address for noVNC |
-| `VNC_INTERNAL_PORT` | Loopback-only raw VNC port; defaults to `5900` and is never published by Compose |
-| `VNC_PASSWORD` | Required and at least eight bytes when noVNC is enabled; classic VNC uses only the first eight bytes |
-| `PI_WEB_PASSWORD` | PI Web Basic Auth password; username is `pi` |
-| `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames |
-| `PASEO_PASSWORD` | Paseo direct-connection password |
-| `PASEO_HOSTNAMES` | Additional Paseo hostnames |
-| `PASEO_RELAY_ENDPOINT` | Custom relay endpoint in `host:port` form |
-| `PASEO_RELAY_USE_TLS` | Set to `true` for a custom TLS relay |
+| Variable               | Purpose                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PI_WEB_IMAGE`         | Container image                                                                                              |
+| `CONTAINER_USER`       | Login alias and home-directory name created by the entrypoint; defaults to `pi`                              |
+| `CONTAINER_BIND_ADDR`  | Service listen address; `127.0.0.1` for host mode, `0.0.0.0` for bridge mode                                 |
+| `PI_WEB_BIND_ADDR`     | Bridge-mode host publish address                                                                             |
+| `PI_WEB_PORT`          | PI Web listen port; defaults to `30141`                                                                      |
+| `PASEO_PORT`           | Paseo listen port; defaults to `6767`                                                                        |
+| `PASEO_ENABLED`        | Enable the Paseo server and first-run pairing; defaults to `true`                                            |
+| `DISPLAY`              | Virtual X display; defaults to `:0`; use an unused value such as `:99` if host networking causes a collision |
+| `XVFB_RESOLUTION`      | Virtual desktop resolution and depth; defaults to `1920x1080x24`                                             |
+| `NOVNC_ENABLED`        | Enable x11vnc and noVNC; defaults to `false`                                                                 |
+| `NOVNC_BIND_ADDR`      | noVNC listen address; defaults to `127.0.0.1`                                                                |
+| `NOVNC_PORT`           | noVNC listen port and bridge-mode container port; defaults to `6080`                                         |
+| `NOVNC_PUBLISH_ADDR`   | Bridge-mode host publish address for noVNC                                                                   |
+| `VNC_INTERNAL_PORT`    | Loopback-only raw VNC port; defaults to `5900` and is never published by Compose                             |
+| `VNC_PASSWORD`         | Required and at least eight bytes when noVNC is enabled; classic VNC uses only the first eight bytes         |
+| `PI_WEB_PASSWORD`      | PI Web Basic Auth password; username is `pi`                                                                 |
+| `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames                                                                                  |
+| `PASEO_PASSWORD`       | Paseo direct-connection password                                                                             |
+| `PASEO_HOSTNAMES`      | Additional Paseo hostnames                                                                                   |
+| `PASEO_RELAY_ENDPOINT` | Custom relay endpoint in `host:port` form                                                                    |
+| `PASEO_RELAY_USE_TLS`  | Set to `true` for a custom TLS relay                                                                         |
 
 For a custom relay:
 

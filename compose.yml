@@ -6,6 +6,7 @@ services:
     build:
       context: .
     restart: unless-stopped
+    shm_size: 1gb
     env_file:
       - .env
     environment:

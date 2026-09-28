@@ -132,7 +132,7 @@ update_seed() {
   fi
 }
 
-for file in settings.json models.json mcp.json instructions.md; do
+for file in settings.json models.json mcp-adapter.json instructions.md; do
   update_seed "$file"
 done
 

@@ -8,9 +8,13 @@
       }
     },
     "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp", "--isolated"],
+      "command": "sh",
+      "args": [
+        "-c",
+        "p=$(basename \"$(readlink \"$CHROMIUM_USER_DATA_DIR/SingletonLock\" 2>/dev/null)\" | awk -F- '{print $NF}'); [ -n \"$p\" ] && [ -d \"/proc/$p\" ] || npx -y @playwright/cli open -s=shared --profile \"$CHROMIUM_USER_DATA_DIR\" --headed >/dev/null 2>&1; exec npx -y @playwright/mcp --endpoint shared"
+      ],
       "env": {
+        "CHROMIUM_USER_DATA_DIR": "~/.config/chromium",
         "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1",
         "PLAYWRIGHT_MCP_SANDBOX": "false",
         "PLAYWRIGHT_MCP_EXECUTABLE_PATH": "/nix/var/nix/profiles/runtime/bin/chromium"
