@@ -23,9 +23,10 @@ RUN mkdir -p /tmp/pi-web-package \
  && git -C /tmp/pi-web-src remote add origin "$PI_WEB_REPOSITORY" \
  && git -C /tmp/pi-web-src fetch --depth=1 origin "$PI_WEB_REF" \
  && git -C /tmp/pi-web-src checkout --detach FETCH_HEAD \
- && for patch in /tmp/pi-web-patches/*.patch; do \
-        [ -e "$patch" ] || continue; \
-        git -C /tmp/pi-web-src apply --whitespace=nowarn "$patch" || exit 1; \
+ && for patch in $(ls -1 /tmp/pi-web-patches/*.patch 2>/dev/null); do \
+        echo "applying patch: $patch"; \
+        git -C /tmp/pi-web-src apply --whitespace=nowarn "$patch" \
+          || { echo "ERROR: patch failed to apply (rebase or remove it): $patch" >&2; exit 1; }; \
       done \
  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund \
  && NEXT_TELEMETRY_DISABLED=1 npm run build \
