@@ -108,6 +108,8 @@ mkdir -p "$HOME/.pi/agent"
 seed=/usr/share/pi-web-container/seed/pi-agent
 seed_state="$HOME/.pi/agent/.seed-state"
 install -d -m 700 "$seed_state"
+install -d -m 700 "$HOME/.playwright"
+install -m 600 /usr/share/pi-web-container/seed/playwright/cli.config.json "$HOME/.playwright/cli.config.json"
 
 file_hash() {
   sha256sum "$1" | cut -d ' ' -f 1
