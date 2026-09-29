@@ -1,6 +1,9 @@
 {
   "defaultProvider": "opencode-free",
   "defaultModel": "big-pickle",
+  "retry": {
+    "maxRetries": 2000
+  },
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:@narumitw/pi-goal",
