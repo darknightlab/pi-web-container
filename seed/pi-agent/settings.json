@@ -13,13 +13,6 @@
       "skills": [],
       "prompts": [],
       "themes": []
-    },
-    {
-      "source": "npm:@narumitw/pi-subagents",
-      "extensions": [],
-      "skills": [],
-      "prompts": [],
-      "themes": []
     }
   ]
 }
