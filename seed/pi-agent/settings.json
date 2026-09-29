@@ -13,6 +13,13 @@
       "skills": [],
       "prompts": [],
       "themes": []
+    },
+    {
+      "source": "git:github.com/canoziia/pi-retry",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
     }
   ]
 }
