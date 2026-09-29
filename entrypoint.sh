@@ -108,8 +108,6 @@ mkdir -p "$HOME/.pi/agent"
 seed=/usr/share/pi-web-container/seed/pi-agent
 seed_state="$HOME/.pi/agent/.seed-state"
 install -d -m 700 "$seed_state"
-install -d -m 700 "$HOME/.playwright"
-install -m 600 /usr/share/pi-web-container/seed/playwright/cli.config.json "$HOME/.playwright/cli.config.json"
 
 file_hash() {
   sha256sum "$1" | cut -d ' ' -f 1
@@ -117,25 +115,41 @@ file_hash() {
 
 update_seed() {
   local file=$1
-  local source="$seed/$file"
-  local target="$HOME/.pi/agent/$file"
+  local mode=${2:-update}
+  case "$mode" in
+    update|overwrite) ;;
+    *) printf 'Invalid seed mode: %s\n' "$mode" >&2; return 1 ;;
+  esac
+  local source=${3:-"$seed/$file"}
+  local target=${4:-"$HOME/.pi/agent/$file"}
   local stamp="$seed_state/$file.sha256"
   local update=0
 
-  if [ ! -e "$target" ]; then
+  if [ "$mode" = overwrite ] || [ ! -e "$target" ]; then
     update=1
   elif [ -e "$stamp" ] && [ "$(file_hash "$target")" = "$(cat "$stamp")" ]; then
     update=1
   fi
 
   if [ "$update" -eq 1 ]; then
+    install -d -m 700 "$(dirname "$target")" "$(dirname "$stamp")"
     install -m 600 "$source" "$target"
     file_hash "$target" > "$stamp"
   fi
 }
 
-for file in settings.json models.json mcp-adapter.json instructions.md; do
-  update_seed "$file"
+# Optional source and target arguments support presets outside the Pi agent directory.
+update_seed playwright/cli.config.json overwrite \
+  /usr/share/pi-web-container/seed/playwright/cli.config.json \
+  "$HOME/.playwright/cli.config.json"
+
+# update preserves user edits; overwrite always replaces the target.
+for file in settings.json models.json mcp-adapter.json agents/settings.json; do
+  update_seed "$file" update
+done
+
+for file in instructions.md agents/general-purpose.md agents/review.md; do
+  update_seed "$file" overwrite
 done
 
 if ! node "$seed/environment.mjs" "$state/environment.md" "$paseo_enabled"; then
