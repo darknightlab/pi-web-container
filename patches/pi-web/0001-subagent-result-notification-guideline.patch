@@ -6,7 +6,7 @@ index 0581a58..eea8a52 100644
            "Use Agent for a focused task that benefits from an isolated context.",
            "Use multiple background Agent calls in the same response for independent parallel work.",
            "Do not duplicate work already delegated to a running subagent.",
-+          "If you obtain a subagent’s completed results through other ways, call `get_subagent_result` immediately to suppress its pending notification so you won’t have to process the same results again.without reprocessing the results.",
++          "If you obtain a subagent’s completed results through other ways, call `get_subagent_result` immediately to suppress its pending notification so you won’t have to process the same results again.",
          ],
          executionMode: "parallel",
          parameters: Type.Object({
