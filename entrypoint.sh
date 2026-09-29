@@ -148,7 +148,7 @@ for file in settings.json models.json mcp-adapter.json agents/settings.json; do
   update_seed "$file" update
 done
 
-for file in instructions.md agents/general-purpose.md agents/review.md; do
+for file in instructions.md agents/general-purpose.md agents/general-purpose-read-only.md agents/review.md; do
   update_seed "$file" overwrite
 done
 
