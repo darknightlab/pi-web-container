@@ -1,0 +1,83 @@
+diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
+index 3cb56d5..b5bce63 100644
+--- a/lib/subagent-extension.ts
++++ b/lib/subagent-extension.ts
+@@ -171,7 +171,7 @@ export function createSubagentExtension(
+           run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           model: Type.Optional(Type.String({ description: "Optional provider/modelId override." })),
+           thinking: Type.Optional(Type.String({ description: "Optional thinking level override." })),
+-          max_turns: Type.Optional(Type.Number({ description: "Optional positive agent turn limit." })),
++          max_turns: Type.Optional(Type.Number({ description: "Optional positive soft turn limit: send a wrap-up steering message once, then wait for natural completion." })),
+           inherit_context: Type.Optional(Type.Boolean({ description: "Include the parent session's active conversation context." })),
+           load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) independently of parent conversation context. Overrides the profile setting." })),
+           isolation: Type.Optional(Type.String({ description: "Run the subagent in an isolated git worktree." })),
+diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
+index 952cd63..0d75880 100644
+--- a/lib/subagent-runtime.test.mjs
++++ b/lib/subagent-runtime.test.mjs
+@@ -24,6 +24,21 @@ test("context file loading defaults off and accepts independent per-call overrid
+   }
+ });
+ 
++test("soft turn limit steers once and never aborts later tool turns", async () => {
++  const source = await readFile(new URL("./subagent-runtime.ts", import.meta.url), "utf8");
++  const listener = source.match(/inner\.subscribe\(\(event\) => \{([\s\S]*?)\n          \}\)/)[1];
++  const steered = [];
++  let aborted = 0;
++  const run = new Function("inner", "turnLimit", `let turnCount = 0; let softLimitReached = false; return (event) => {${listener}};`);
++  const onEvent = run({ steer: message => steered.push(message), abort: () => aborted++ }, 2);
++  onEvent({ type: "message_end" });
++  onEvent({ type: "turn_end" });
++  assert.equal(steered.length, 0);
++  for (let i = 0; i < 10; i++) onEvent({ type: "turn_end", message: { stopReason: "toolUse" } });
++  assert.equal(steered.length, 1);
++  assert.equal(aborted, 0);
++});
++
+ function completedRun() {
+   return {
+     sessionId: "child-session",
+diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
+index b700d11..2e7e842 100644
+--- a/lib/subagent-runtime.ts
++++ b/lib/subagent-runtime.ts
+@@ -317,7 +317,6 @@ export function createSubagentController(
+       };
+ 
+       let turnCount = 0;
+-      let maxTurnsReached = false;
+       let softLimitReached = false;
+       const unsubscribeTurns = turnLimit
+         ? inner.subscribe((event) => {
+@@ -326,9 +325,6 @@ export function createSubagentController(
+             if (!softLimitReached && turnCount >= turnLimit) {
+               softLimitReached = true;
+               void inner.steer("You have reached your turn limit. Wrap up immediately and provide your final answer now.");
+-            } else if (softLimitReached && turnCount >= turnLimit + 1) {
+-              maxTurnsReached = true;
+-              void inner.abort();
+             }
+           })
+         : () => {};
+@@ -369,7 +365,7 @@ export function createSubagentController(
+         try {
+           await inner.prompt(delegatedTask, { source: "rpc" });
+           const text = inner.getLastAssistantText()?.trim();
+-          const aborted = stored.abortRequested && !maxTurnsReached;
++          const aborted = stored.abortRequested;
+           const providerError = aborted ? undefined : lastAssistantError(sessionManager);
+           result = {
+             ...initialRun,
+@@ -383,10 +379,10 @@ export function createSubagentController(
+           const aborted = stored.abortRequested || request.signal?.aborted;
+           result = {
+             ...initialRun,
+-            status: aborted ? "aborted" : maxTurnsReached ? "completed" : "failed",
++            status: aborted ? "aborted" : "failed",
+             completedAt: new Date().toISOString(),
+             ...(text ? { result: text } : {}),
+-            ...(!aborted && !maxTurnsReached
++            ...(!aborted
+               ? { error: error instanceof Error ? error.message : String(error) }
+               : {}),
+           };
