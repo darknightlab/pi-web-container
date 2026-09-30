@@ -1,0 +1,42 @@
+diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
+index d52ce5f..7c4c8cc 100644
+--- a/lib/subagent-runtime.test.mjs
++++ b/lib/subagent-runtime.test.mjs
+@@ -87,8 +87,9 @@ test("disabled built-in subagents reject stale Agent calls before starting", asy
+   );
+ });
+ 
+-test("resume reuses the persisted child session and keeps its session id", async () => {
++test("resume reuses the persisted child session and clears previous consumption", async () => {
+   const calls = [];
++  globalThis.__piSubagentConsumedResults = new Set(["child"]);
+   const entries = [
+     { type: "custom", customType: "pi-web:subagent", data: {
+       version: 1,
+@@ -136,6 +137,13 @@ test("resume reuses the persisted child session and keeps its session id", async
+   assert.equal(result.sessionId, "child");
+   assert.equal(result.status, "completed");
+   assert.deepEqual(calls, ["continue this"]);
++  const notifications = [];
++  parent.inner.sendCustomMessage = async (message) => notifications.push(message);
++  await controller.extensionRuntime.notifyParent(result);
++  assert.equal(notifications.length, 1, "previous consumption must not suppress the resumed result");
++  controller.extensionRuntime.markResultConsumed("child");
++  await controller.extensionRuntime.notifyParent(result);
++  assert.equal(notifications.length, 1, "current consumption still suppresses duplicate notification");
+ });
+ 
+ test("resume rejects a child owned by another parent", async () => {
+diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
+index 44eb13f..ca385ce 100644
+--- a/lib/subagent-runtime.ts
++++ b/lib/subagent-runtime.ts
+@@ -485,6 +485,8 @@ export function createSubagentController(
+     let resolveCompletion!: (run: SubagentRunInfo) => void;
+     const completion = new Promise<SubagentRunInfo>((resolve) => { resolveCompletion = resolve; });
+     const stored: StoredSubagentExecution = { run: initialRun, completion, abortRequested: false };
++    // A resumed run must not inherit consumption of the previous result.
++    getConsumedSubagentResults().delete(request.sessionId);
+     getSubagentRuns().set(request.sessionId, stored);
+     request.onUpdate?.(initialRun);
+     dependencies.invalidateSessionList();
