@@ -1,28 +1,28 @@
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index 8704103..878cf1a 100644
+index b561cd8..878cf1a 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
 @@ -1729,8 +1729,8 @@ export function getSubagentRun(sessionId: string) {
    return SUBAGENT_CONTROLLER.get(sessionId);
  }
  
--export function steerSubagent(sessionId: string, message: string, model?: string) {
--  return SUBAGENT_CONTROLLER.steer(sessionId, message, model);
+-export function steerSubagent(sessionId: string, message: string) {
+-  return SUBAGENT_CONTROLLER.steer(sessionId, message);
 +export function steerSubagent(sessionId: string, message: string, model?: string, thinking?: string) {
 +  return SUBAGENT_CONTROLLER.steer(sessionId, message, model, thinking);
  }
  
  export function abortSubagent(sessionId: string) {
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 4417380..14c3642 100644
+index 0dd15d8..14c3642 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
-@@ -435,19 +435,19 @@ test("steer_subagent returns success and runtime failures", async () => {
+@@ -435,16 +435,20 @@ test("steer_subagent returns success and runtime failures", async () => {
    const { tools } = await loadTools({
      async start() { throw new Error("unused"); },
      async get() { return null; },
--    async steer(id, message, model) {
--      calls.push([id, message, model]);
+-    async steer(id, message) {
+-      calls.push([id, message]);
 +    async steer(id, message, model, thinking) {
 +      calls.push([id, message, model, thinking]);
        if (message === "fail") throw new Error("not running");
@@ -30,21 +30,19 @@ index 4417380..14c3642 100644
    });
    const tool = tools.get("steer_subagent");
    const success = await tool.execute("call", { agent_id: "child-session", message: "focus" });
--  assert.deepEqual(calls[0], ["child-session", "focus", undefined]);
+-  assert.deepEqual(calls[0], ["child-session", "focus"]);
 +  assert.deepEqual(calls[0], ["child-session", "focus", undefined, undefined]);
    assert.match(success.content[0].text, /sent/);
  
--  const switched = await tool.execute("call", { agent_id: "child-session", message: "focus", model: "projectk-openai/gpt-6.1-sol" });
--  assert.deepEqual(calls[1], ["child-session", "focus", "projectk-openai/gpt-6.1-sol"]);
--  assert.match(switched.content[0].text, /Switched to projectk-openai\/gpt-6\.1-sol/);
 +  const switched = await tool.execute("call", { agent_id: "child-session", message: "focus", model: "projectk-openai/gpt-6.1-sol", thinking: "high" });
 +  assert.deepEqual(calls[1], ["child-session", "focus", "projectk-openai/gpt-6.1-sol", "high"]);
 +  assert.match(switched.content[0].text, /Switched to projectk-openai\/gpt-6\.1-sol with thinking high/);
- 
++
    const failure = await tool.execute("call", { agent_id: "child-session", message: "fail" });
    assert.equal(failure.isError, true);
+   assert.equal(failure.content[0].text, "not running");
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index c89d092..d2acd27 100644
+index 34f4706..d2acd27 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
 @@ -57,6 +57,8 @@ export interface ResumeSubagentRequest {
@@ -60,7 +58,7 @@ index c89d092..d2acd27 100644
    start(request: StartSubagentRequest): Promise<SubagentExecution>;
    resume(request: ResumeSubagentRequest): Promise<SubagentExecution>;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
--  steer(sessionId: string, message: string, model?: string): Promise<void>;
+-  steer(sessionId: string, message: string): Promise<void>;
 +  steer(sessionId: string, message: string, model?: string, thinking?: string): Promise<void>;
    notifyParent(run: SubagentRunInfo): Promise<void>;
    markResultConsumed(run: Pick<SubagentRunInfo, "sessionId" | "completedAt">): void;
@@ -74,53 +72,81 @@ index c89d092..d2acd27 100644
                    ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
                    signal,
                    onUpdate: (run) => onUpdate?.({
-@@ -295,11 +299,12 @@ export function createSubagentExtension(
+@@ -290,15 +294,18 @@ export function createSubagentExtension(
+       pi.registerTool(defineTool({
+         name: "steer_subagent",
+         label: "Steer agent",
+-        description: "Send a steering message to a currently running subagent session.",
++        description: "Send a steering message to a currently running subagent session, optionally switching its model first.",
+         parameters: Type.Object({
            agent_id: Type.String({ description: "Subagent session ID." }),
            message: Type.String({ description: "Instruction to inject after the current tool execution." }),
-           model: Type.Optional(Type.String({ description: "Optional provider/modelId to switch the subagent to before delivering the message. Applies from the next turn." })),
++          model: Type.Optional(Type.String({ description: "Optional provider/modelId to switch the subagent to before delivering the message. Applies from the next turn." })),
 +          thinking: Type.Optional(Type.String({ description: "Optional thinking level to apply before the message. Applies from the next turn." })),
          }),
          async execute(_toolCallId, params) {
            try {
--            await runtime.steer(params.agent_id, params.message, params.model);
--            const switched = params.model ? ` Switched to ${params.model} from the next turn.` : "";
+-            await runtime.steer(params.agent_id, params.message);
+-            return { content: [{ type: "text", text: `Steering message sent to ${params.agent_id}.` }], details: undefined };
 +            await runtime.steer(params.agent_id, params.message, params.model, params.thinking);
 +            const switched = `${params.model ? ` Switched to ${params.model}` : ""}${params.thinking ? ` with thinking ${params.thinking}` : ""}${params.model || params.thinking ? " from the next turn." : ""}`;
-             return { content: [{ type: "text", text: `Steering message sent to ${params.agent_id}.${switched}` }], details: undefined };
++            return { content: [{ type: "text", text: `Steering message sent to ${params.agent_id}.${switched}` }], details: undefined };
            } catch (error) {
              return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], details: undefined, isError: true };
+           }
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 9027338..0fd8223 100644
+index 76ed117..0fd8223 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
-@@ -57,6 +57,7 @@ test("steer switches the subagent model before delivering the message", async ()
-         getModels: () => models,
-       },
-       setModel: async (model) => events.push(["model", model.id]),
+@@ -39,6 +39,47 @@ test("soft turn limit steers once and never aborts later tool turns", async () =
+   assert.equal(aborted, 0);
+ });
+ 
++test("steer switches the subagent model before delivering the message", async () => {
++  const events = [];
++  const models = [
++    { id: "old", provider: "test" },
++    { id: "new", provider: "test" },
++  ];
++  const child = {
++    sessionFile: "/tmp/child.jsonl",
++    cwd: "/tmp",
++    isAlive: () => true,
++    isRunning: () => true,
++    waitUntilReady: async () => {},
++    inner: {
++      modelRuntime: {
++        getModel: (provider, id) => models.find((model) => model.provider === provider && model.id === id),
++        getModels: () => models,
++      },
++      setModel: async (model) => events.push(["model", model.id]),
 +      setThinkingLevel: (level) => events.push(["thinking", level]),
-       steer: async (message) => events.push(["steer", message]),
-     },
-   };
-@@ -68,11 +69,15 @@ test("steer switches the subagent model before delivering the message", async ()
-     invalidateSessionList: () => {},
-     isBuiltInSubagentsEnabled: () => true,
-   });
--  await controller.extensionRuntime.steer("child", "  keep going  ", "test/new");
--  assert.deepEqual(events, [["model", "new"], ["steer", "keep going"]]);
++      steer: async (message) => events.push(["steer", message]),
++    },
++  };
++  const controller = createSubagentController({
++    getSession: () => child,
++    registerSession: () => {},
++    reopenSession: async () => child,
++    resolveSessionPath: async () => null,
++    invalidateSessionList: () => {},
++    isBuiltInSubagentsEnabled: () => true,
++  });
 +  await controller.extensionRuntime.steer("child", "  keep going  ", "test/new", "high");
 +  assert.deepEqual(events, [["model", "new"], ["thinking", "high"], ["steer", "keep going"]]);
-   await controller.extensionRuntime.steer("child", "again");
--  assert.deepEqual(events[2], ["steer", "again"]);
++  await controller.extensionRuntime.steer("child", "again");
 +  assert.deepEqual(events[3], ["steer", "again"]);
 +  await controller.extensionRuntime.steer("child", "later", undefined, "max");
 +  assert.deepEqual(events[4], ["thinking", "max"]);
 +  assert.deepEqual(events[5], ["steer", "later"]);
-   await assert.rejects(controller.extensionRuntime.steer("child", "x", "test/missing"), /Subagent model not found/);
++  await assert.rejects(controller.extensionRuntime.steer("child", "x", "test/missing"), /Subagent model not found/);
 +  await assert.rejects(controller.extensionRuntime.steer("child", "x", undefined, "turbo"), /Invalid subagent thinking level/);
- });
- 
++});
++
  function completedRun() {
-@@ -358,6 +363,60 @@ test("a resumed run that fails right away still notifies after the parent inspec
+   return {
+     sessionId: "child-session",
+@@ -322,6 +363,60 @@ test("a resumed run that fails right away still notifies after the parent inspec
    assert.deepEqual(delivered[1].options, { deliverAs: "followUp", triggerTurn: true });
  });
  
@@ -182,14 +208,14 @@ index 9027338..0fd8223 100644
    const controller = createSubagentController({
      getSession: (id) => id === "parent" ? { inner: { sessionManager: { getSessionId: () => "parent" } }, sessionFile: "/tmp/parent.jsonl", cwd: "/tmp", isAlive: () => true, isRunning: () => false, waitUntilReady: async () => {} } : undefined,
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index 1c41e3f..92bca8c 100644
+index b12f776..92bca8c 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
 @@ -65,7 +65,7 @@ export interface SubagentRuntimeDependencies {
  export interface SubagentController {
    readonly extensionRuntime: SubagentExtensionRuntime;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
--  steer(sessionId: string, message: string, model?: string): Promise<void>;
+-  steer(sessionId: string, message: string): Promise<void>;
 +  steer(sessionId: string, message: string, model?: string, thinking?: string): Promise<void>;
    abort(sessionId: string): Promise<void>;
  }
@@ -221,20 +247,17 @@ index 1c41e3f..92bca8c 100644
          await wrapper!.inner.prompt(request.task, { source: "rpc" });
          const text = wrapper!.inner.getLastAssistantText()?.trim();
          const providerError = stored.abortRequested ? undefined : lastAssistantError(manager);
-@@ -605,14 +618,17 @@ export function createSubagentController(
+@@ -605,10 +618,17 @@ export function createSubagentController(
      return run && settleOrphanedRun(run);
    }
  
--  async function steer(sessionId: string, message: string, model?: string): Promise<void> {
+-  async function steer(sessionId: string, message: string): Promise<void> {
 +  async function steer(sessionId: string, message: string, model?: string, thinking?: string): Promise<void> {
      const wrapper = dependencies.getSession(sessionId);
      if (!wrapper?.isAlive() || !wrapper.isRunning()) throw new Error("Subagent is not running");
      if (!message.trim()) throw new Error("Steering message is required");
--    // Switch before steering so the queued message is answered by the new model on the next turn.
 +    // Switch before steering so the queued message is answered with the new settings on the next turn.
-     const modelRuntime = (wrapper.inner as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
--    const next = parseSubagentModel(modelRuntime, model);
--    if (next) await wrapper.inner.setModel(next);
++    const modelRuntime = (wrapper.inner as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
 +    const nextModel = parseSubagentModel(modelRuntime, model);
 +    const nextThinking = parseSubagentThinking(thinking);
 +    // Model first: setModel re-derives the thinking level, so thinking must be applied after it.
