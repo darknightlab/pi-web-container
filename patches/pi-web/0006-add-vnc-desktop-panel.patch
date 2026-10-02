@@ -1,0 +1,654 @@
+diff --git a/app/api/vnc/route.ts b/app/api/vnc/route.ts
+new file mode 100644
+index 0000000..796b630
+--- /dev/null
++++ b/app/api/vnc/route.ts
+@@ -0,0 +1,25 @@
++import { NextResponse } from "next/server";
++
++export const dynamic = "force-dynamic";
++export const runtime = "nodejs";
++
++// The container that owns the virtual desktop configures the embedded noVNC
++// endpoint through the environment. When PI_WEB_VNC_URL is unset the panel
++// reports that the desktop is unavailable instead of embedding a dead iframe.
++function readVncUrl(): string | null {
++  const url = process.env.PI_WEB_VNC_URL?.trim();
++  return url ? url : null;
++}
++
++export function GET() {
++  const url = readVncUrl();
++  const password = process.env.PI_WEB_VNC_PASSWORD;
++  return NextResponse.json({
++    enabled: url !== null,
++    url,
++    // noVNC accepts the password as a URL parameter. It is only echoed when the
++    // operator explicitly exports it, so passwordless desktops stay clean and
++    // the value never appears in the page URL on its own.
++    ...(url && password ? { password } : {}),
++  });
++}
+diff --git a/app/globals.css b/app/globals.css
+index 465531c..0871c94 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -429,6 +429,111 @@ html.dark .web-login-error {
+   height: 100%;
+ }
+ 
++.vnc-panel {
++  display: grid;
++  grid-template-rows: 38px minmax(0, 1fr);
++  width: 100%;
++  height: 100%;
++  min-width: 0;
++  min-height: 0;
++  background: #111318;
++}
++
++.vnc-panel-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  min-width: 0;
++  padding: 0 10px 0 13px;
++  border-bottom: 1px solid #2f3540;
++  background: #181b21;
++  color: #9ca3af;
++  font-family: var(--font-mono);
++  font-size: 11px;
++}
++
++.vnc-panel-title {
++  display: flex;
++  align-items: center;
++  min-width: 0;
++  gap: 8px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.vnc-panel-actions {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  flex-shrink: 0;
++}
++
++.vnc-panel-header button,
++.vnc-panel-header a {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 27px;
++  height: 27px;
++  flex-shrink: 0;
++  border: 1px solid #343a46;
++  border-radius: 5px;
++  background: transparent;
++  color: #9ca3af;
++  cursor: pointer;
++}
++
++.vnc-panel-header button:disabled {
++  opacity: 0.45;
++  cursor: default;
++}
++
++.vnc-panel-header button:hover:not(:disabled),
++.vnc-panel-header a:hover {
++  background: #242932;
++  color: #e5e7eb;
++}
++
++.vnc-status-dot {
++  width: 7px;
++  height: 7px;
++  flex: 0 0 7px;
++  border-radius: 50%;
++  background: #facc15;
++}
++
++.vnc-status-dot.is-ready { background: #4ade80; }
++.vnc-status-dot.is-error { background: #f87171; }
++
++.vnc-frame {
++  position: relative;
++  min-width: 0;
++  min-height: 0;
++  overflow: hidden;
++}
++
++.vnc-frame-iframe {
++  display: block;
++  width: 100%;
++  height: 100%;
++  border: 0;
++  background: #111318;
++}
++
++.vnc-placeholder {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  width: 100%;
++  height: 100%;
++  padding: 16px;
++  color: #9ca3af;
++  font-family: var(--font-mono);
++  font-size: 12px;
++  text-align: center;
++}
++
+ .terminal-xterm .xterm-viewport {
+   background-color: #111318;
+ }
+diff --git a/components/AppShell.tsx b/components/AppShell.tsx
+index 369b5c2..a67c17c 100644
+--- a/components/AppShell.tsx
++++ b/components/AppShell.tsx
+@@ -17,6 +17,8 @@ import { ToolDefinitionsPanel } from "./ToolDefinitionsPanel";
+ import { AgentSessionPanel } from "./AgentSessionPanel";
+ import { TerminalPanel } from "./TerminalPanel";
+ import { newTerminalTab, restoreTerminalTabs, TERMINAL_TABS_KEY, type TerminalTab } from "./terminal-tab-state";
++import { VncPanel } from "./VncPanel";
++import { newVncTab, restoreVncTabs, type VncTab } from "./vnc-tab-state";
+ import { useTheme } from "@/hooks/useTheme";
+ import { useI18n } from "@/hooks/useI18n";
+ import { useIsMobile, useIsNarrowMobile } from "@/hooks/useIsMobile";
+@@ -459,26 +461,41 @@ export function AppShell() {
+     return () => ro.disconnect();
+   }, [activeTopPanel, isMobile]);
+ 
+-  // Files unmount when inactive; workspace terminals stay mounted until closed.
++  // Files unmount when inactive; workspace terminals and the VNC panel stay
++  // mounted until closed.
+   const [fileTabs, setFileTabs] = useState<Tab[]>([]);
+   const [activeFileTabId, setActiveFileTabId] = useState<string | null>(null);
+   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
++  const [vncTabs, setVncTabs] = useState<VncTab[]>([]);
+   const [terminalsRestored, setTerminalsRestored] = useState(false);
+-  const panelTabs: Tab[] = [...fileTabs, ...terminalTabs.map((tab) => ({
+-    id: tab.id,
+-    label: getFileName(tab.cwd) || tab.cwd,
+-    filePath: tab.cwd,
+-    kind: "terminal" as const,
+-    closing: Boolean(tab.closing),
+-  }))];
++  const panelTabs: Tab[] = [
++    ...fileTabs,
++    ...terminalTabs.map((tab) => ({
++      id: tab.id,
++      label: getFileName(tab.cwd) || tab.cwd,
++      filePath: tab.cwd,
++      kind: "terminal" as const,
++      closing: Boolean(tab.closing),
++    })),
++    ...vncTabs.map((tab) => ({
++      id: tab.id,
++      label: translate("vnc.title"),
++      filePath: "vnc",
++      kind: "vnc" as const,
++    })),
++  ];
+ 
+   useEffect(() => {
+     try {
+-      const saved = restoreTerminalTabs(window.sessionStorage.getItem(TERMINAL_TABS_KEY));
+-      setTerminalTabs(saved.tabs);
+-      if (saved.activeId) {
+-        setActiveFileTabId(saved.activeId);
+-        setRightPanelOpen(saved.open);
++      const raw = window.sessionStorage.getItem(TERMINAL_TABS_KEY);
++      const terminals = restoreTerminalTabs(raw);
++      const vnc = restoreVncTabs(raw);
++      setTerminalTabs(terminals.tabs);
++      setVncTabs(vnc.tabs);
++      const activeId = terminals.activeId ?? vnc.activeId;
++      if (activeId) {
++        setActiveFileTabId(activeId);
++        setRightPanelOpen(terminals.open || vnc.open);
+       }
+     } catch { /* storage is optional */ }
+     setTerminalsRestored(true);
+@@ -489,11 +506,12 @@ export function AppShell() {
+     try {
+       window.sessionStorage.setItem(TERMINAL_TABS_KEY, JSON.stringify({
+         tabs: terminalTabs.map(({ id, cwd }) => ({ id, cwd })),
++        vncTabs: vncTabs.map(({ id }) => ({ id })),
+         activeId: activeFileTabId,
+         open: rightPanelOpen,
+       }));
+     } catch { /* storage is optional */ }
+-  }, [terminalTabs, activeFileTabId, rightPanelOpen, terminalsRestored]);
++  }, [terminalTabs, vncTabs, activeFileTabId, rightPanelOpen, terminalsRestored]);
+ 
+   const handleFileViewerStateChange = useCallback((
+     tabId: string,
+@@ -1072,12 +1090,21 @@ export function AppShell() {
+     if (isMobile) setSidebarOpen(false);
+   }, [terminalTabs, isMobile]);
+ 
++  const handleOpenVnc = useCallback(() => {
++    const existing = vncTabs[0];
++    const tab = existing ?? newVncTab();
++    if (!existing) setVncTabs((tabs) => [...tabs, tab]);
++    setActiveFileTabId(tab.id);
++    setRightPanelOpen(true);
++    if (isMobile) setSidebarOpen(false);
++  }, [vncTabs, isMobile]);
++
+   const handleTerminalClosed = (tab: TerminalTab) => {
+     const replacement = tab.closing === "restart" ? newTerminalTab(tab.cwd) : null;
+     const remaining = terminalTabs.filter((item) => item.id !== tab.id);
+     setTerminalTabs((tabs) => tabs.flatMap((item) => item.id !== tab.id ? [item] : replacement ? [replacement] : []));
+-    setActiveFileTabId((current) => current !== tab.id ? current : replacement?.id ?? remaining.at(-1)?.id ?? fileTabs.at(-1)?.id ?? null);
+-    if (!replacement && !remaining.length && !fileTabs.length) setRightPanelOpen(false);
++    setActiveFileTabId((current) => current !== tab.id ? current : replacement?.id ?? remaining.at(-1)?.id ?? vncTabs.at(-1)?.id ?? fileTabs.at(-1)?.id ?? null);
++    if (!replacement && !remaining.length && !fileTabs.length && !vncTabs.length) setRightPanelOpen(false);
+   };
+ 
+   const handleCloseFileTab = useCallback((tabId: string) => {
+@@ -1085,17 +1112,27 @@ export function AppShell() {
+       setTerminalTabs((tabs) => tabs.map((tab) => tab.id === tabId && !tab.closing ? { ...tab, closing: "close" } : tab));
+       return;
+     }
++    if (vncTabs.some((tab) => tab.id === tabId)) {
++      const remainingVnc = vncTabs.filter((tab) => tab.id !== tabId);
++      setVncTabs(remainingVnc);
++      setActiveFileTabId((cur) => {
++        if (cur !== tabId) return cur;
++        return fileTabs.at(-1)?.id ?? remainingVnc.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? null;
++      });
++      if (remainingVnc.length === 0 && fileTabs.length === 0 && terminalTabs.length === 0) setRightPanelOpen(false);
++      return;
++    }
+     setFileTabs((prev) => {
+       const next = prev.filter((t) => t.id !== tabId);
+-      if (next.length === 0 && terminalTabs.length === 0) setRightPanelOpen(false);
++      if (next.length === 0 && terminalTabs.length === 0 && vncTabs.length === 0) setRightPanelOpen(false);
+       return next;
+     });
+     setActiveFileTabId((cur) => {
+       if (cur !== tabId) return cur;
+       const remaining = fileTabs.filter((t) => t.id !== tabId);
+-      return remaining.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? null;
++      return remaining.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? vncTabs.at(-1)?.id ?? null;
+     });
+-  }, [fileTabs, terminalTabs]);
++  }, [fileTabs, terminalTabs, vncTabs]);
+ 
+   const handleViewFullHistory = useCallback(() => {
+     if (!selectedSession) return;
+@@ -1194,6 +1231,7 @@ export function AppShell() {
+         onCwdChange={handleCwdChange}
+         onOpenFile={handleOpenFile}
+         onOpenTerminal={handleOpenTerminal}
++        onOpenVnc={handleOpenVnc}
+         explorerRefreshKey={explorerRefreshKey}
+         onExplorerRefresh={handleExplorerRefresh}
+         onAtMention={handleAtMention}
+@@ -2503,7 +2541,7 @@ export function AppShell() {
+                 { sourceSessionId: activeFileTab.sourceSessionId, page },
+               )}
+             />
+-          ) : !terminalTabs.some((tab) => tab.id === activeFileTabId) ? (
++          ) : !terminalTabs.some((tab) => tab.id === activeFileTabId) && !vncTabs.some((tab) => tab.id === activeFileTabId) ? (
+             <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
+                {translate("files.noneOpen")}
+             </div>
+@@ -2519,6 +2557,11 @@ export function AppShell() {
+               />
+             </div>
+           ))}
++          {vncTabs.map((tab) => (
++            <div key={tab.id} hidden={tab.id !== activeFileTabId} style={{ width: "100%", height: "100%" }}>
++              <VncPanel tab={tab} active={rightPanelOpen && tab.id === activeFileTabId} />
++            </div>
++          ))}
+         </div>
+       </div>
+     </div>
+diff --git a/components/SessionSidebar.tsx b/components/SessionSidebar.tsx
+index 1b8d06e..49b1bd1 100644
+--- a/components/SessionSidebar.tsx
++++ b/components/SessionSidebar.tsx
+@@ -135,6 +135,7 @@ interface Props {
+   ) => void;
+   onOpenFile?: (filePath: string, fileName: string, options?: { sourceSessionId?: string | null; modeHint?: "diff" }) => void;
+   onOpenTerminal?: (cwd: string) => void;
++  onOpenVnc?: () => void;
+   explorerRefreshKey?: number;
+   onExplorerRefresh?: () => void;
+   onAtMention?: (relativePath: string, isDir: boolean) => void;
+@@ -395,7 +396,7 @@ function PiWebTitle() {
+   );
+ }
+ 
+-export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, onOpenTerminal, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
++export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSession, initialSessionId, skipInitialProjectSelection, onInitialRestoreDone, refreshKey, onSessionDeleted, selectedCwd: selectedCwdProp, onCwdChange, onOpenFile, onOpenTerminal, onOpenVnc, explorerRefreshKey, onExplorerRefresh, onAtMention, onAtMentions, onBackgroundTaskDone, onRunningSessionIdsChange, onSessionsChange }: Props) {
+   const { t } = useI18n();
+   const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
+   // Tracked in a ref only: the version is compared against the polled value to
+@@ -1999,6 +2000,17 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
+                 </svg>
+               </ToolbarIconButton>
+             )}
++            {onOpenVnc && (
++              <ToolbarIconButton
++                onClick={() => onOpenVnc()}
++                title={t("vnc.open")}
++                color="var(--text-dim)"
++              >
++                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
++                  <rect x="2" y="4" width="20" height="13" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
++                </svg>
++              </ToolbarIconButton>
++            )}
+             {explorerOpen && changesCount > 0 && (
+               <ToolbarIconButton
+                 onClick={() => setChangesCollapsed((v) => !v)}
+diff --git a/components/TabBar.tsx b/components/TabBar.tsx
+index 0f5d90a..f48c1a1 100644
+--- a/components/TabBar.tsx
++++ b/components/TabBar.tsx
+@@ -9,7 +9,7 @@ export interface Tab {
+   id: string;
+   label: string;
+   filePath: string;
+-  kind?: "terminal";
++  kind?: "terminal" | "vnc";
+   closing?: boolean;
+   sourceSessionId?: string | null;
+   initialDisplayMode?: FileViewerDisplayMode;
+@@ -48,7 +48,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+           <div
+             key={tab.id}
+             role="tab"
+-            aria-label={tab.kind === "terminal" ? t("terminal.tabLabel", { name: tab.label }) : tab.label}
++            aria-label={tab.kind === "terminal" ? t("terminal.tabLabel", { name: tab.label }) : tab.kind === "vnc" ? t("vnc.tabLabel", { name: tab.label }) : tab.label}
+             aria-selected={isActive}
+             tabIndex={isActive || (!activeTabId && tabs[0].id === tab.id) ? 0 : -1}
+             onKeyDown={(event) => {
+@@ -100,6 +100,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                   <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+                 </svg>
++              ) : tab.kind === "vnc" ? (
++                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
++                  <rect x="2" y="4" width="20" height="13" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
++                </svg>
+               ) : getFileIcon(tab.label, 13)}
+             </span>
+             <span
+@@ -130,8 +134,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+                 flexShrink: 0,
+                 transition: "background 0.1s, color 0.1s",
+               }}
+-               title={t(tab.kind === "terminal" ? "terminal.close" : "i18n.close")}
+-               aria-label={`${t(tab.kind === "terminal" ? "terminal.close" : "i18n.close")} ${tab.label}`}
++               title={t(tab.kind === "terminal" ? "terminal.close" : tab.kind === "vnc" ? "vnc.close" : "i18n.close")}
++               aria-label={`${t(tab.kind === "terminal" ? "terminal.close" : tab.kind === "vnc" ? "vnc.close" : "i18n.close")} ${tab.label}`}
+             >
+               <svg width="11" height="11" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                 <line x1="2" y1="2" x2="8" y2="8" />
+diff --git a/components/VncPanel.tsx b/components/VncPanel.tsx
+new file mode 100644
+index 0000000..e04fb2e
+--- /dev/null
++++ b/components/VncPanel.tsx
+@@ -0,0 +1,92 @@
++"use client";
++
++import { useEffect, useMemo, useState } from "react";
++import { useI18n } from "@/hooks/useI18n";
++import type { VncTab } from "./vnc-tab-state";
++
++interface Props {
++  tab: VncTab;
++  active: boolean;
++}
++
++interface VncConfig {
++  enabled: boolean;
++  url: string | null;
++  password?: string;
++}
++
++function withPassword(url: string, password: string | undefined): string {
++  if (!password) return url;
++  const separator = url.includes("?") ? "&" : "?";
++  return `${url}${separator}password=${encodeURIComponent(password)}`;
++}
++
++export function VncPanel({ tab, active }: Props) {
++  const { t } = useI18n();
++  const [config, setConfig] = useState<VncConfig | null | undefined>(undefined);
++  const [reloadKey, setReloadKey] = useState(0);
++
++  useEffect(() => {
++    let cancelled = false;
++    fetch("/api/vnc")
++      .then((response) => (response.ok ? response.json() : null))
++      .then((data: VncConfig | null) => {
++        if (!cancelled) setConfig(data ?? { enabled: false, url: null });
++      })
++      .catch(() => {
++        if (!cancelled) setConfig({ enabled: false, url: null });
++      });
++    return () => { cancelled = true; };
++  }, []);
++
++  const src = useMemo(() => {
++    if (!config?.enabled || !config.url) return null;
++    return withPassword(config.url, config.password);
++  }, [config]);
++
++  return (
++    <section className={`vnc-panel${active ? " is-active" : ""}`} aria-label={t("vnc.title")} data-tab-id={tab.id}>
++      <header className="vnc-panel-header">
++        <div className="vnc-panel-title">
++          <span className={`vnc-status-dot${src ? " is-ready" : config === undefined ? " is-connecting" : " is-error"}`} />
++          <span>{t("vnc.title")}</span>
++        </div>
++        <div className="vnc-panel-actions">
++          <button
++            type="button"
++            onClick={() => setReloadKey((key) => key + 1)}
++            disabled={!src}
++            title={t("vnc.reload")}
++            aria-label={t("vnc.reload")}
++          >
++            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
++              <path d="M20 11a8 8 0 1 0-2.34 5.66" /><polyline points="20 4 20 11 13 11" />
++            </svg>
++          </button>
++          {src && (
++            <a href={src} target="_blank" rel="noopener noreferrer" title={t("vnc.openInNewTab")} aria-label={t("vnc.openInNewTab")}>
++              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
++                <path d="M14 4h6v6" /><path d="M20 4 10 14" /><path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
++              </svg>
++            </a>
++          )}
++        </div>
++      </header>
++      <div className="vnc-frame">
++        {src ? (
++          <iframe
++            key={reloadKey}
++            className="vnc-frame-iframe"
++            src={src}
++            title={t("vnc.title")}
++            allow="clipboard-read; clipboard-write"
++          />
++        ) : (
++          <div className="vnc-placeholder" role="status">
++            {config === undefined ? t("vnc.loading") : t("vnc.unavailable")}
++          </div>
++        )}
++      </div>
++    </section>
++  );
++}
+diff --git a/components/vnc-tab-state.test.mjs b/components/vnc-tab-state.test.mjs
+new file mode 100644
+index 0000000..d400193
+--- /dev/null
++++ b/components/vnc-tab-state.test.mjs
+@@ -0,0 +1,22 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { newVncTab, restoreVncTabs } from "./vnc-tab-state.ts";
++
++test("restored VNC tabs retain their identity", () => {
++  const first = newVncTab();
++  const second = newVncTab();
++  assert.notEqual(first.id, second.id);
++  const saved = restoreVncTabs(JSON.stringify({ vncTabs: [first, second], activeId: second.id, open: true }));
++  assert.deepEqual(saved, { tabs: [first, second], activeId: second.id, open: true });
++});
++
++test("storage corruption cannot create invalid or duplicate VNC tabs", () => {
++  assert.deepEqual(restoreVncTabs("broken"), { tabs: [], activeId: null, open: false });
++  assert.deepEqual(restoreVncTabs(null), { tabs: [], activeId: null, open: false });
++  const tab = newVncTab();
++  const saved = restoreVncTabs(JSON.stringify({
++    vncTabs: [null, {}, tab, tab, { id: "../../bad" }],
++    activeId: "missing",
++  }));
++  assert.deepEqual(saved, { tabs: [tab], activeId: null, open: false });
++});
+diff --git a/components/vnc-tab-state.ts b/components/vnc-tab-state.ts
+new file mode 100644
+index 0000000..d38cc13
+--- /dev/null
++++ b/components/vnc-tab-state.ts
+@@ -0,0 +1,35 @@
++export interface VncTab {
++  id: string;
++}
++
++// VNC tabs share the workspace-tab storage blob with terminal tabs so a single
++// active-tab/panel-open value keeps restoring both kinds consistently.
++export const VNC_TABS_KEY = "pi-web:vnc-tabs";
++
++function randomId(): string {
++  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
++}
++
++export function newVncTab(): VncTab {
++  return { id: randomId() };
++}
++
++export function restoreVncTabs(raw: string | null): { tabs: VncTab[]; activeId: string | null; open: boolean } {
++  try {
++    const saved = JSON.parse(raw ?? "null");
++    const tabs: VncTab[] = [];
++    for (const tab of Array.isArray(saved?.vncTabs) ? saved.vncTabs : []) {
++      if (tab && typeof tab.id === "string" && /^[a-f0-9]{32}$/.test(tab.id)
++        && !tabs.some((existing) => existing.id === tab.id)) {
++        tabs.push({ id: tab.id });
++      }
++    }
++    return {
++      tabs,
++      activeId: tabs.some((tab) => tab.id === saved.activeId) ? saved.activeId : null,
++      open: saved?.open === true,
++    };
++  } catch {
++    return { tabs: [], activeId: null, open: false };
++  }
++}
+diff --git a/lib/i18n/messages/en.ts b/lib/i18n/messages/en.ts
+index e2b13f3..04edfff 100644
+--- a/lib/i18n/messages/en.ts
++++ b/lib/i18n/messages/en.ts
+@@ -449,6 +449,14 @@ export const enLocale: LocalePlugin = {
+     "terminal.exited": "Terminal closed",
+     "terminal.error": "Connection error",
+     "terminal.exitCode": "Process exited with code {code}",
++    "vnc.title": "Virtual desktop",
++    "vnc.tabLabel": "Virtual desktop: {name}",
++    "vnc.open": "Open virtual desktop (VNC)",
++    "vnc.close": "Close virtual desktop",
++    "vnc.reload": "Reload virtual desktop",
++    "vnc.openInNewTab": "Open virtual desktop in a new tab",
++    "vnc.loading": "Loading virtual desktop…",
++    "vnc.unavailable": "Virtual desktop is not enabled.",
+     "chat.outputLocal": "output stays local",
+     "chat.outputModel": "output sent to model",
+     "chat.configuredTools": "From settings.json defaultTools",
+diff --git a/lib/i18n/messages/zh-CN.ts b/lib/i18n/messages/zh-CN.ts
+index 192fa4a..56c09b6 100644
+--- a/lib/i18n/messages/zh-CN.ts
++++ b/lib/i18n/messages/zh-CN.ts
+@@ -449,6 +449,14 @@ export const zhCNLocale: LocalePlugin = {
+     "terminal.exited": "终端已关闭",
+     "terminal.error": "连接错误",
+     "terminal.exitCode": "进程已退出，退出码 {code}",
++    "vnc.title": "虚拟桌面",
++    "vnc.tabLabel": "虚拟桌面：{name}",
++    "vnc.open": "打开虚拟桌面（VNC）",
++    "vnc.close": "关闭虚拟桌面",
++    "vnc.reload": "重新加载虚拟桌面",
++    "vnc.openInNewTab": "在新标签页打开虚拟桌面",
++    "vnc.loading": "正在加载虚拟桌面…",
++    "vnc.unavailable": "虚拟桌面未启用。",
+     "chat.outputLocal": "输出保留在本地",
+     "chat.outputModel": "输出发送给模型",
+     "chat.configuredTools": "取自 settings.json 的 defaultTools",
+diff --git a/lib/i18n/messages/zh-TW.ts b/lib/i18n/messages/zh-TW.ts
+index a4092ed..540dc55 100644
+--- a/lib/i18n/messages/zh-TW.ts
++++ b/lib/i18n/messages/zh-TW.ts
+@@ -449,6 +449,14 @@ export const zhTWLocale: LocalePlugin = {
+     "terminal.exited": "終端機已關閉",
+     "terminal.error": "連線錯誤",
+     "terminal.exitCode": "程序已結束，結束代碼 {code}",
++    "vnc.title": "虛擬桌面",
++    "vnc.tabLabel": "虛擬桌面：{name}",
++    "vnc.open": "開啟虛擬桌面（VNC）",
++    "vnc.close": "關閉虛擬桌面",
++    "vnc.reload": "重新載入虛擬桌面",
++    "vnc.openInNewTab": "在新分頁開啟虛擬桌面",
++    "vnc.loading": "正在載入虛擬桌面…",
++    "vnc.unavailable": "虛擬桌面未啟用。",
+     "chat.outputLocal": "輸出保留在本地",
+     "chat.outputModel": "輸出會傳送給模型",
+     "chat.configuredTools": "取自 settings.json 的 defaultTools",
+diff --git a/next.config.ts b/next.config.ts
+index 566fcb0..18acdf7 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -78,6 +78,19 @@ const nextConfig: NextConfig = {
+     "172.31.*.*",
+     "192.168.*.*",
+   ],
++  // Proxy the container's noVNC endpoint under the Pi Web origin so the VNC
++  // panel can embed it in an iframe without a second hostname or port. Next's
++  // external-rewrite proxy forwards WebSocket upgrades too (the noVNC
++  // `websock` transport), which is why this works in a plain `next start`
++  // without a custom server. The destination is baked at build time, so it is
++  // fixed to the container's loopback noVNC port.
++  async rewrites() {
++    const target = (process.env.PI_WEB_VNC_TARGET ?? "http://127.0.0.1:6080").replace(/\/+$/, "");
++    return [
++      { source: "/vnc", destination: `${target}/` },
++      { source: "/vnc/:path*", destination: `${target}/:path*` },
++    ];
++  },
+   async headers() {
+     return [
+       {
+diff --git a/proxy.ts b/proxy.ts
+index 1977e56..3b1bafa 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -88,4 +88,4 @@ export function proxy(request: NextRequest) {
+   return NextResponse.next();
+ }
+ 
+-export const config = { matcher: ["/", "/login", "/api/:path*"] };
++export const config = { matcher: ["/", "/login", "/api/:path*", "/vnc/:path*"] };

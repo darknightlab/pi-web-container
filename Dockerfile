@@ -15,6 +15,10 @@ RUN state="$(mktemp -d)" \
 # patches/pi-web/ directory on top so any local fixes can follow upstream cleanly.
 ARG PI_WEB_REPOSITORY=https://github.com/agegr/pi-web.git
 ARG PI_WEB_REF=main
+# noVNC endpoint the Pi Web VNC panel proxies under its own origin. Keep the
+# port in sync with NOVNC_PORT (the entrypoint default is 6080) or override
+# this build arg.
+ARG PI_WEB_VNC_TARGET=http://127.0.0.1:6080
 
 COPY patches/pi-web/ /tmp/pi-web-patches/
 WORKDIR /tmp/pi-web-src
@@ -29,7 +33,7 @@ RUN mkdir -p /tmp/pi-web-package \
           || { echo "ERROR: patch failed to apply (rebase or remove it): $patch" >&2; exit 1; }; \
       done \
  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund \
- && NEXT_TELEMETRY_DISABLED=1 npm run build \
+ && NEXT_TELEMETRY_DISABLED=1 PI_WEB_VNC_TARGET="$PI_WEB_VNC_TARGET" npm run build \
  && npm pack --pack-destination /tmp/pi-web-package \
  && npm install -g --prefix /usr/local --no-audit --no-fund \
       /tmp/pi-web-package/*.tgz \

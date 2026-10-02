@@ -83,7 +83,7 @@ validate_port() {
 }
 
 paseo_enabled=$(parse_bool PASEO_ENABLED "${PASEO_ENABLED:-true}")
-novnc_enabled=$(parse_bool NOVNC_ENABLED "${NOVNC_ENABLED:-false}")
+novnc_enabled=$(parse_bool NOVNC_ENABLED "${NOVNC_ENABLED:-true}")
 
 export PI_WEB_PORT=${PI_WEB_PORT:-30141}
 export PASEO_PORT=${PASEO_PORT:-6767}
@@ -209,18 +209,34 @@ else
 fi
 
 if [ "$novnc_enabled" -eq 1 ]; then
-  : "${VNC_PASSWORD:?[entrypoint] VNC_PASSWORD is required when NOVNC_ENABLED=true.}"
-  if [ "${#VNC_PASSWORD}" -lt 8 ]; then
-    echo "[entrypoint] VNC_PASSWORD must contain at least eight bytes." >&2
-    exit 2
-  fi
   export NOVNC_BIND_ADDR=${NOVNC_BIND_ADDR:-127.0.0.1}
   export NOVNC_PORT=${NOVNC_PORT:-6080}
   export VNC_INTERNAL_PORT=${VNC_INTERNAL_PORT:-5900}
   validate_port NOVNC_PORT "$NOVNC_PORT"
   validate_port VNC_INTERNAL_PORT "$VNC_INTERNAL_PORT"
-  printf '%s\n' "$VNC_PASSWORD" > "$state/vnc-password"
-  chmod 600 "$state/vnc-password"
+
+  # VNC authentication is optional. An authenticated ingress (Cloudflare
+  # Access, Tailscale, an SSH tunnel, ...) usually fronts the desktop, and Pi
+  # Web embeds noVNC behind its own login. When VNC_PASSWORD is empty x11vnc
+  # starts with -nopw.
+  if [ -n "${VNC_PASSWORD:-}" ]; then
+    if [ "${#VNC_PASSWORD}" -lt 8 ]; then
+      echo "[entrypoint] VNC_PASSWORD must contain at least eight bytes when set." >&2
+      exit 2
+    fi
+    printf '%s\n' "$VNC_PASSWORD" > "$state/vnc-password"
+    chmod 600 "$state/vnc-password"
+  else
+    rm -f "$state/vnc-password"
+  fi
+
+  # Embed the virtual desktop in Pi Web through its own origin. /api/vnc reads
+  # PI_WEB_VNC_URL at runtime; the noVNC proxy target is baked into the Pi Web
+  # build (see the PI_WEB_VNC_TARGET build arg in the Dockerfile).
+  export PI_WEB_VNC_URL=${PI_WEB_VNC_URL:-/vnc/vnc.html?autoconnect=1&resize=scale}
+  if [ -n "${VNC_PASSWORD:-}" ]; then
+    export PI_WEB_VNC_PASSWORD="$VNC_PASSWORD"
+  fi
   unset VNC_PASSWORD
 
   cat > "$state/supervisor.d/novnc.conf" <<'EOF'

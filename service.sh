@@ -102,11 +102,17 @@ start_x11vnc() {
   wait_for_x
   unset WAYLAND_DISPLAY
   export XDG_SESSION_TYPE=x11
+  # Authentication is optional: when the entrypoint wrote no password file,
+  # x11vnc runs passwordless (pair it with an authenticated ingress).
+  local auth=(-nopw)
+  if [ -s "$state/vnc-password" ]; then
+    auth=(-passwdfile "$state/vnc-password")
+  fi
   exec x11vnc \
     -display "${DISPLAY:-:0}" \
     -localhost \
     -rfbport "${VNC_INTERNAL_PORT:-5900}" \
-    -passwdfile "$state/vnc-password" \
+    "${auth[@]}" \
     -forever \
     -shared
 }

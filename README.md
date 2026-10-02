@@ -65,15 +65,38 @@ podman compose exec pi-web pi config
 
 Xvfb and Fluxbox run on `DISPLAY=:0` by default. When host networking exposes a conflicting host X11/Xwayland abstract socket, select an unused display such as `DISPLAY=:99` in `.env`. Playwright MCP uses the Nix-provided Chromium without an explicit head mode, so its headed default follows the available X display. MCP browser sessions use `--isolated`, keeping each temporary profile separate and discarding it after the session.
 
-noVNC is disabled by default. To enable browser access to the virtual desktop, set:
+noVNC is enabled by default, loopback-only and passwordless; noVNC listens on
+`127.0.0.1:6080` and x11vnc on `127.0.0.1:5900`. To turn it off set:
 
 ```dotenv
-NOVNC_ENABLED=true
+NOVNC_ENABLED=false
+```
+
+To keep it on but require a password:
+
+```dotenv
 NOVNC_BIND_ADDR=127.0.0.1
 VNC_PASSWORD=change-me
 ```
 
-Then open <http://127.0.0.1:6080/vnc.html>. The raw VNC server always binds to loopback and Compose never publishes it. With host networking it is host-local on port 5900; change `VNC_INTERNAL_PORT` if that port is already occupied. For remote noVNC access, use a protected tunnel. For bridge networking, set `NOVNC_BIND_ADDR=0.0.0.0` and publish port 6080.
+`VNC_PASSWORD` is optional. When it is empty, x11vnc starts with `-nopw`; use
+that together with an authenticated ingress (Cloudflare Access, Tailscale, an
+SSH tunnel). When it is set it must be at least eight bytes and is also handed
+to the embedded Pi Web viewer so it can autoconnect.
+
+With `NOVNC_ENABLED=true`, PI Web also proxies noVNC under its own origin at
+`/vnc/` and adds a **virtual desktop** button next to the terminal button in the
+file explorer header, which opens noVNC in the right-hand panel. This works in
+a plain `next start` because Next forwards the noVNC `websock` WebSocket upgrade
+for the `/vnc/*` rewrite. The proxy target is baked into the PI Web build and
+defaults to `http://127.0.0.1:6080`; if you change `NOVNC_PORT`, rebuild with
+`--build-arg PI_WEB_VNC_TARGET=http://127.0.0.1:<port>`.
+
+You can still open <http://127.0.0.1:6080/vnc.html> directly. The raw VNC server
+always binds to loopback and Compose never publishes it. With host networking it
+is host-local on port 5900; change `VNC_INTERNAL_PORT` if that port is already
+occupied. For remote standalone noVNC access, use a protected tunnel. For bridge
+networking, set `NOVNC_BIND_ADDR=0.0.0.0` and publish port 6080.
 
 ## Cua Driver
 
@@ -138,12 +161,12 @@ Common options:
 | `PASEO_ENABLED`        | Enable the Paseo server and first-run pairing; defaults to `true`                                            |
 | `DISPLAY`              | Virtual X display; defaults to `:0`; use an unused value such as `:99` if host networking causes a collision |
 | `XVFB_RESOLUTION`      | Virtual desktop resolution and depth; defaults to `1920x1080x24`                                             |
-| `NOVNC_ENABLED`        | Enable x11vnc and noVNC; defaults to `false`                                                                 |
+| `NOVNC_ENABLED`        | Enable x11vnc and noVNC; defaults to `true`                                                                  |
 | `NOVNC_BIND_ADDR`      | noVNC listen address; defaults to `127.0.0.1`                                                                |
 | `NOVNC_PORT`           | noVNC listen port and bridge-mode container port; defaults to `6080`                                         |
 | `NOVNC_PUBLISH_ADDR`   | Bridge-mode host publish address for noVNC                                                                   |
 | `VNC_INTERNAL_PORT`    | Loopback-only raw VNC port; defaults to `5900` and is never published by Compose                             |
-| `VNC_PASSWORD`         | Required and at least eight bytes when noVNC is enabled; classic VNC uses only the first eight bytes         |
+| `VNC_PASSWORD`         | Optional; at least eight bytes when set. Empty starts x11vnc with `-nopw` (front it with an authenticated ingress) |
 | `PI_WEB_PASSWORD`      | PI Web Basic Auth password; username is `pi`                                                                 |
 | `PI_WEB_ALLOWED_HOSTS` | Additional PI Web hostnames                                                                                  |
 | `PASEO_PASSWORD`       | Paseo direct-connection password                                                                             |
