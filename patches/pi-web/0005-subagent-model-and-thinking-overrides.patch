@@ -72,12 +72,13 @@ index 34f4706..d2acd27 100644
                    ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
                    signal,
                    onUpdate: (run) => onUpdate?.({
-@@ -290,15 +294,18 @@ export function createSubagentExtension(
+@@ -290,16 +294,19 @@ export function createSubagentExtension(
        pi.registerTool(defineTool({
          name: "steer_subagent",
          label: "Steer agent",
 -        description: "Send a steering message to a currently running subagent session.",
 +        description: "Send a steering message to a currently running subagent session, optionally switching its model first.",
+         exposure: SUBAGENT_TOOL_EXPOSURE,
          parameters: Type.Object({
            agent_id: Type.String({ description: "Subagent session ID." }),
            message: Type.String({ description: "Instruction to inject after the current tool execution." }),
