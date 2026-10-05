@@ -2,7 +2,6 @@
   "mcpServers": {
     "cua-driver": {
       "command": "/nix/var/nix/profiles/runtime/bin/cua-driver",
-      "exposure": "direct",
       "description": "Control the X11 desktop: take screenshots, inspect windows, and send mouse and keyboard actions.",
       "args": ["mcp"],
       "env": {
@@ -11,7 +10,6 @@
     },
     "playwright": {
       "command": "sh",
-      "exposure": "direct",
       "description": "Automate web pages in the container's shared Chromium browser.",
       "args": [
         "-c",
