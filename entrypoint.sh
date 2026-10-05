@@ -144,7 +144,7 @@ update_seed playwright/cli.config.json overwrite \
   "$HOME/.playwright/cli.config.json"
 
 # update preserves user edits; overwrite always replaces the target.
-for file in settings.json models.json mcp-adapter.json agents/settings.json; do
+for file in settings.json models.json mcp.json agents/settings.json; do
   update_seed "$file" update
 done
 

@@ -2,6 +2,8 @@
   "mcpServers": {
     "cua-driver": {
       "command": "/nix/var/nix/profiles/runtime/bin/cua-driver",
+      "exposure": "direct",
+      "description": "Control the X11 desktop: take screenshots, inspect windows, and send mouse and keyboard actions.",
       "args": ["mcp"],
       "env": {
         "CUA_DRIVER_PERMISSION_MODE": "standard"
@@ -9,6 +11,8 @@
     },
     "playwright": {
       "command": "sh",
+      "exposure": "direct",
+      "description": "Automate web pages in the container's shared Chromium browser.",
       "args": [
         "-c",
         "p=$(basename \"$(readlink \"$CHROMIUM_USER_DATA_DIR/SingletonLock\" 2>/dev/null)\" | awk -F- '{print $NF}'); [ -n \"$p\" ] && [ -d \"/proc/$p\" ] || npx -y @playwright/cli open -s=shared --profile \"$CHROMIUM_USER_DATA_DIR\" --headed >/dev/null 2>&1; exec npx -y @playwright/mcp --endpoint shared"
