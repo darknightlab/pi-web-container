@@ -2,10 +2,9 @@
   "name": "pi-web-container-agent-runtime",
   "version": "1.0.0",
   "private": true,
-  "description": "Pinned Pi and Paseo runtime dependencies for pi-web-container",
+  "description": "Pinned Paseo runtime for pi-web-container; the Pi CLI is installed to match pi-web",
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "latest",
-    "@getpaseo/cli": "beta",
-    "@getpaseo/server": "beta"
+    "@getpaseo/cli": "0.7.0-beta.2",
+    "@getpaseo/server": "0.7.0-beta.2"
   }
 }

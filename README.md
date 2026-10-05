@@ -216,11 +216,11 @@ podman compose build
 podman compose up -d
 ```
 
-The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, fetches the official `agegr/pi-web` repository at the `main` ref, applies every `*.patch` file from the repository-owned `patches/pi-web/` directory, then builds, packs, and installs PI Web globally under `/usr/local`. This keeps local fixes as small, rebaseable patches instead of a long-lived fork. Pi follows npm's `latest` tag and Paseo follows npm's `beta` tag; the repository-owned `npm/runtime/package-lock.json` pins their resolved versions and complete dependency graph for reproducible image builds.
+The Dockerfile extends `ghcr.io/canoziia/agent-infra-container:nix`, fetches the official `agegr/pi-web` repository at the `main` ref, applies every `*.patch` file from the repository-owned `patches/pi-web/` directory, then builds, packs, and installs PI Web globally under `/usr/local`. This keeps local fixes as small, rebaseable patches instead of a long-lived fork. The Pi CLI is not pinned separately: it is installed at the exact `@earendil-works/pi-coding-agent` version the PI Web build uses, so the terminal `pi`, Paseo's Pi provider, and PI Web's session engine never skew. Paseo's version is pinned by `npm/runtime/package-lock.json` for reproducible image builds.
 
 The defaults use the `main` branch of `agegr/pi-web`. If an upstream change makes a patch fail to apply, the build stops so you can rebase it. Patches live in `patches/pi-web/`; there are currently none active (the previous `preserve-streaming-message-on-session-resume` fix has been merged upstream).
 
-To update the pinned agent runtime intentionally:
+The Pi CLI version is not pinned in this repository; it follows the `@earendil-works/pi-coding-agent` version the PI Web build resolves. To update Paseo's pinned version intentionally, change the `@getpaseo/*` versions in `npm/runtime/package.json` and regenerate the lock:
 
 ```bash
 cd npm/runtime

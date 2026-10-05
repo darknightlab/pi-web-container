@@ -41,7 +41,13 @@ RUN mkdir -p /tmp/pi-web-package \
 
 COPY npm/runtime/package.json npm/runtime/package-lock.json /usr/local/lib/pi-web-container/runtime/
 WORKDIR /usr/local/lib/pi-web-container/runtime
+# Paseo is installed from the lock. The Pi CLI is not pinned here: it is
+# installed at the exact version of the SDK pi-web was built with, so the
+# terminal `pi`, Paseo's Pi provider, and Pi Web's session engine never skew.
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+ && PI_VERSION=$(node -e "const {findPackageJSON}=require('node:module');const fs=require('fs');process.stdout.write(JSON.parse(fs.readFileSync(findPackageJSON('@earendil-works/pi-coding-agent','/usr/local/lib/node_modules/@agegr/pi-web/package.json'),'utf8')).version)") \
+ && echo "Installing the Pi CLI at pi-web's SDK version: ${PI_VERSION}" \
+ && npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-save --no-package-lock "@earendil-works/pi-coding-agent@${PI_VERSION}" \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/pi /usr/local/bin/pi \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/paseo /usr/local/bin/paseo \
  && pi --version \
