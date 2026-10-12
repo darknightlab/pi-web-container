@@ -1,0 +1,146 @@
+diff --git a/lib/subagent-extension.integration.test.mjs b/lib/subagent-extension.integration.test.mjs
+index e9f2b01..e4a7fd5 100644
+--- a/lib/subagent-extension.integration.test.mjs
++++ b/lib/subagent-extension.integration.test.mjs
+@@ -247,13 +247,11 @@ test("Agent exposes only the parameters the model can choose correctly", async (
+     const { runtime } = recordingRuntime();
+     session = await createSession(dir, faux, [createSubagentExtension(runtime, () => [])]);
+     const agent = session.getAllTools().find((tool) => tool.name === "Agent");
++    // pi-web-container 0004 offers the per-call profile overrides again, as before Pi Web 0.12.
+     assert.deepEqual(Object.keys(agent.parameters.properties).sort(), [
+-      "description", "input_files", "isolation", "model", "prompt", "resume", "run_in_background", "subagent_type",
++      "description", "inherit_context", "input_files", "isolation", "load_context_files", "max_turns", "model",
++      "prompt", "resume", "run_in_background", "subagent_type", "thinking",
+     ]);
+-    // The profile owns these; a model that guessed one used to win over the configured value.
+-    for (const removed of ["thinking", "max_turns", "inherit_context"]) {
+-      assert.equal(agent.parameters.properties[removed], undefined, `${removed} must not be offered.`);
+-    }
+     // A string, not a "worktree" literal: a model that fills every optional field with "" must still
+     // be able to start a subagent.
+     assert.equal(agent.parameters.properties.isolation.type, "string");
+diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
+index af408a5..ceec376 100644
+--- a/lib/subagent-extension.test.mjs
++++ b/lib/subagent-extension.test.mjs
+@@ -402,6 +402,34 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
+   assert.equal(result.content[0].text, "Subagent existing completed.\n\ncontinued");
+ });
+ 
++test("Agent forwards per-call profile overrides to a new subagent and ignores them on resume", async () => {
++  let started;
++  let resumed;
++  const finished = run({ sessionId: "child-session", status: "completed", result: "ok" });
++  const { tools } = await loadTools({
++    async start(request) { started = request; return { run: finished, completion: Promise.resolve(finished) }; },
++    async resume(request) { resumed = request; return { run: finished, completion: Promise.resolve(finished) }; },
++    async get() { return null; },
++    async steer() {},
++  });
++  const context = { sessionManager: { getSessionId: () => "parent-session" } };
++  const overrides = { thinking: "high", max_turns: 6, inherit_context: true };
++  await tools.get("Agent").execute("tool-call", { prompt: "Task", description: "Task", ...overrides }, undefined, undefined, context);
++  assert.equal(started.thinking, "high");
++  assert.equal(started.maxTurns, 6);
++  assert.equal(started.inheritContext, true);
++
++  // Unset values leave the profile in charge.
++  await tools.get("Agent").execute("tool-call", { prompt: "Task", description: "Task", thinking: "", inherit_context: undefined }, undefined, undefined, context);
++  assert.equal(started.thinking, undefined);
++  assert.equal(started.maxTurns, undefined);
++  assert.equal(started.inheritContext, undefined);
++
++  await tools.get("Agent").execute("tool-call", { resume: "child-session", prompt: "More", description: "More", max_turns: 6, inherit_context: true }, undefined, undefined, context);
++  assert.equal(resumed.maxTurns, undefined);
++  assert.equal(resumed.inheritContext, undefined);
++});
++
+ test("Agent resume rejects options that only apply to a new subagent", async () => {
+   const { tools } = await loadTools({
+     async start() { throw new Error("must not start"); },
+diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
+index 6d32aee..e4afd04 100644
+--- a/lib/subagent-extension.ts
++++ b/lib/subagent-extension.ts
+@@ -51,6 +51,9 @@ export interface StartSubagentRequest {
+   description: string;
+   runInBackground?: boolean;
+   model?: string;
++  thinking?: string;
++  maxTurns?: number;
++  inheritContext?: boolean;
+   loadContextFiles?: boolean;
+   isolation?: "worktree";
+   signal?: AbortSignal;
+@@ -184,6 +187,9 @@ export function createSubagentExtension(
+           description: Type.String({ description: "Short activity label shown in the UI." }),
+           run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
++          thinking: Type.Optional(Type.String({ description: "Optional thinking level override for a new subagent (off, minimal, low, medium, high, xhigh, max). Beats a model's \":<level>\" suffix and the profile setting." })),
++          max_turns: Type.Optional(Type.Number({ description: "Optional positive turn limit for a new subagent. Overrides the profile setting." })),
++          inherit_context: Type.Optional(Type.Boolean({ description: "Include the parent session's active conversation context in a new subagent. Overrides the profile setting." })),
+           load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
+           isolation: Type.Optional(Type.String({ description: 'Set to "worktree" to run the subagent in an isolated git worktree.' })),
+         }),
+@@ -224,6 +230,9 @@ export function createSubagentExtension(
+               description: params.description,
+               ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
+               ...(params.model ? { model: params.model } : {}),
++              ...(params.thinking?.trim() ? { thinking: params.thinking.trim() } : {}),
++              ...(params.max_turns ? { maxTurns: params.max_turns } : {}),
++              ...(params.inherit_context !== undefined ? { inheritContext: params.inherit_context } : {}),
+               ...(params.load_context_files !== undefined ? { loadContextFiles: params.load_context_files } : {}),
+               ...(params.isolation === "worktree" ? { isolation: "worktree" as const } : {}),
+               signal,
+diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
+index 4b7cb2b..ea62036 100644
+--- a/lib/subagent-runtime.test.mjs
++++ b/lib/subagent-runtime.test.mjs
+@@ -21,6 +21,19 @@ test("context file loading defaults off and a per-call value overrides the profi
+   }
+ });
+ 
++test("per-call thinking, turn limit, and context inheritance beat the profile", async () => {
++  const source = await readFile(new URL("./subagent-runtime.ts", import.meta.url), "utf8");
++  assert.match(source, /const inheritContext = request\.inheritContext \?\? profile\.inheritContext;/);
++  assert.match(source, /const thinking = request\.thinking\n\s+\?\? callModel\?\.thinkingLevel\n\s+\?\? profile\.thinking/);
++  const requested = source.match(/const requestedTurns = ([^;]+);/)[1];
++  const limit = source.match(/const turnLimit = ([^;]+);/)[1];
++  const turnLimit = new Function("request", "profile", `const requestedTurns = ${requested}; return ${limit};`);
++  assert.equal(turnLimit({ maxTurns: 6.7 }, { maxTurns: 20 }), 6);
++  assert.equal(turnLimit({}, { maxTurns: 20 }), 20);
++  assert.equal(turnLimit({ maxTurns: 0.5 }, { maxTurns: 20 }), 20);
++  assert.equal(turnLimit({ maxTurns: Number.NaN }, {}), undefined);
++});
++
+ function completedRun() {
+   return {
+     sessionId: "child-session",
+diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
+index 197883b..10c871f 100644
+--- a/lib/subagent-runtime.ts
++++ b/lib/subagent-runtime.ts
+@@ -264,9 +264,11 @@ export function createSubagentController(
+         isolatedWorktree = await addWorktree(parent.cwd, `pi-web-agent-${randomUUID()}`);
+       }
+       const childCwd = isolatedWorktree?.path ?? parent.cwd;
+-      const inheritContext = profile.inheritContext;
++      // A per-call value beats the profile's (pi-web-container 0004).
++      const inheritContext = request.inheritContext ?? profile.inheritContext;
+       // `parseProfileFile` already floors a positive profile `max_turns`, so it is an integer or absent.
+-      const turnLimit = profile.maxTurns;
++      const requestedTurns = request.maxTurns !== undefined ? Math.floor(request.maxTurns) : undefined;
++      const turnLimit = requestedTurns !== undefined && requestedTurns >= 1 ? requestedTurns : profile.maxTurns;
+ 
+       const agentDir = getAgentDir();
+       const parentModelRuntime = (parent.inner as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
+@@ -414,7 +416,8 @@ export function createSubagentController(
+       // a model with a suffix chose both for this run.
+       const callModel = parseSubagentModel(parentModelRuntime, request.model);
+       const profileModel = callModel ? undefined : parseSubagentModel(parentModelRuntime, profile.model);
+-      const thinking = callModel?.thinkingLevel
++      const thinking = request.thinking
++        ?? callModel?.thinkingLevel
+         ?? profile.thinking
+         ?? profileModel?.thinkingLevel
+         ?? parent.inner.agent.state?.thinkingLevel;

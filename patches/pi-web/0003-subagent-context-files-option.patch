@@ -1,8 +1,8 @@
 diff --git a/app/api/subagents/profiles/route.test.mjs b/app/api/subagents/profiles/route.test.mjs
-index 6d433c3..b6ca8d6 100644
+index 85661ad..137137d 100644
 --- a/app/api/subagents/profiles/route.test.mjs
 +++ b/app/api/subagents/profiles/route.test.mjs
-@@ -34,6 +34,7 @@ function profile(overrides = {}) {
+@@ -35,6 +35,7 @@ function profile(overrides = {}) {
      loadSkills: true,
      loadExtensions: true,
      inheritContext: false,
@@ -10,7 +10,7 @@ index 6d433c3..b6ca8d6 100644
      runInBackground: true,
      enabled: true,
      ...overrides,
-@@ -60,10 +61,13 @@ test("profiles route creates, lists, and deletes a project profile", async (t) =
+@@ -224,10 +225,13 @@ test("profiles route creates, lists, and deletes a project profile", async (t) =
    assert.deepEqual(putBody.profile.tools, []);
    assert.equal(putBody.profile.loadSkills, true);
    assert.equal(putBody.profile.loadExtensions, true);
@@ -24,7 +24,7 @@ index 6d433c3..b6ca8d6 100644
  
    const getResponse = await GET(new Request(`http://localhost/api/subagents/profiles?cwd=${encodeURIComponent(cwd)}`));
    const getBody = await getResponse.json();
-@@ -72,6 +76,7 @@ test("profiles route creates, lists, and deletes a project profile", async (t) =
+@@ -236,6 +240,7 @@ test("profiles route creates, lists, and deletes a project profile", async (t) =
    assert.deepEqual(listedProfile.tools, []);
    assert.equal(listedProfile.loadSkills, true);
    assert.equal(listedProfile.loadExtensions, true);
@@ -33,42 +33,44 @@ index 6d433c3..b6ca8d6 100644
    const deleteResponse = await DELETE(jsonRequest("DELETE", { cwd, scope: "project", name: "api-test-agent" }));
    assert.equal(deleteResponse.status, 200);
 diff --git a/app/api/subagents/profiles/route.ts b/app/api/subagents/profiles/route.ts
-index c1959a2..f9a26a4 100644
+index 832ac8a..828e057 100644
 --- a/app/api/subagents/profiles/route.ts
 +++ b/app/api/subagents/profiles/route.ts
-@@ -88,6 +88,7 @@ export async function PATCH(req: Request) {
+@@ -94,6 +94,7 @@ export async function PATCH(req: Request) {
        thinking: source.thinking,
        maxTurns: source.maxTurns,
        inheritContext: source.inheritContext,
 +      loadContextFiles: source.loadContextFiles,
        runInBackground: source.runInBackground,
-       enabled: source.enabled,
-     };
+       color: source.color,
+       isolation: source.isolation,
 diff --git a/components/AgentsConfig.test.mjs b/components/AgentsConfig.test.mjs
-index bac4678..d912718 100644
+index 88ea558..5b44b6b 100644
 --- a/components/AgentsConfig.test.mjs
 +++ b/components/AgentsConfig.test.mjs
-@@ -111,6 +111,7 @@ test("uses the same form controls for editable and readonly profiles", () => {
-   assert.match(source, /<select aria-label=\{t\("agents\.thinking"\)\}[\s\S]*?disabled=\{disabled\}/);
-   assert.match(source, /<input aria-label=\{t\("agents\.maxTurns"\)[\s\S]*?disabled=\{disabled\}/);
-   assert.match(source, /<Toggle label=\{t\("agents\.inheritContext"\)\} disabled=\{disabled\}/);
+@@ -61,3 +61,9 @@ test("a profile model's pi :level suffix names its base model; a listed colon id
+   assert.equal(base("openai/gpt-5:turbo", isListed), "openai/gpt-5:turbo");
+   assert.equal(base("openai/gpt-5:", isListed), "openai/gpt-5:");
+ });
++
++test("profiles expose and round-trip the context-file loading toggle", () => {
 +  assert.match(source, /<Toggle label=\{t\("agents\.loadContextFiles"\)\} disabled=\{disabled\} checked=\{draft\.loadContextFiles\}/);
-   assert.match(source, /<Toggle label=\{t\("agents\.background"\)\} disabled=\{disabled\}/);
-   assert.match(source, /<Toggle label=\{t\("agents\.loadSkills"\)\} disabled=\{disabled\}/);
-   assert.match(source, /<Toggle label=\{t\("agents\.loadExtensions"\)\} disabled=\{disabled\}/);
++  const declaration = source.slice(source.indexOf("function editableProfile("), source.indexOf("function profileKey("));
++  assert.match(declaration, /loadContextFiles: profile\.loadContextFiles/);
++});
 diff --git a/components/AgentsConfig.tsx b/components/AgentsConfig.tsx
-index b82e437..c574563 100644
+index 861a1c6..cdf3dca 100644
 --- a/components/AgentsConfig.tsx
 +++ b/components/AgentsConfig.tsx
-@@ -51,6 +51,7 @@ const EMPTY_PROFILE: EditableProfile = {
-   loadExtensions: false,
+@@ -57,6 +57,7 @@ const EMPTY_PROFILE: EditableProfile = {
+   mcp: "off",
    promptMode: "append",
    inheritContext: false,
 +  loadContextFiles: false,
    runInBackground: false,
    enabled: true,
  };
-@@ -88,6 +89,7 @@ function editableProfile(profile: SubagentProfile): EditableProfile {
+@@ -98,6 +99,7 @@ function editableProfile(profile: SubagentProfile): EditableProfile {
      ...(profile.thinking ? { thinking: profile.thinking } : {}),
      ...(profile.maxTurns ? { maxTurns: profile.maxTurns } : {}),
      inheritContext: profile.inheritContext,
@@ -76,7 +78,7 @@ index b82e437..c574563 100644
      runInBackground: profile.runInBackground,
      enabled: profile.enabled,
    };
-@@ -639,6 +641,7 @@ export function AgentsConfig({
+@@ -711,6 +713,7 @@ export function AgentsConfig({
  
                    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px 20px" }}>
                      <Toggle label={t("agents.inheritContext")} disabled={disabled} checked={draft.inheritContext} onChange={(checked) => update("inheritContext", checked)} />
@@ -85,10 +87,10 @@ index b82e437..c574563 100644
                    </div>
                  </ConfigDetailStack>
 diff --git a/lib/i18n/messages/en.ts b/lib/i18n/messages/en.ts
-index ff40a9b..975deaa 100644
+index 03477fa..d7a375e 100644
 --- a/lib/i18n/messages/en.ts
 +++ b/lib/i18n/messages/en.ts
-@@ -87,6 +87,7 @@ export const enLocale: LocalePlugin = {
+@@ -144,6 +144,7 @@ export const enLocale: LocalePlugin = {
      "agents.disable": "Disable sub-agent",
      "agents.builtinPath": "Built-in profile",
      "agents.inheritContext": "Inherit parent context",
@@ -97,10 +99,10 @@ index ff40a9b..975deaa 100644
      "agents.duplicate": "Duplicate",
      "agents.copyName": "{name} copy",
 diff --git a/lib/i18n/messages/zh-CN.ts b/lib/i18n/messages/zh-CN.ts
-index f4f228f..2fa6f65 100644
+index 1e5ce66..2291067 100644
 --- a/lib/i18n/messages/zh-CN.ts
 +++ b/lib/i18n/messages/zh-CN.ts
-@@ -87,6 +87,7 @@ export const zhCNLocale: LocalePlugin = {
+@@ -144,6 +144,7 @@ export const zhCNLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "内置配置",
      "agents.inheritContext": "继承父会话上下文",
@@ -109,10 +111,10 @@ index f4f228f..2fa6f65 100644
      "agents.duplicate": "创建副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/i18n/messages/zh-TW.ts b/lib/i18n/messages/zh-TW.ts
-index 76e309a..9f3db48 100644
+index 1d4065f..fd0370c 100644
 --- a/lib/i18n/messages/zh-TW.ts
 +++ b/lib/i18n/messages/zh-TW.ts
-@@ -87,6 +87,7 @@ export const zhTWLocale: LocalePlugin = {
+@@ -144,6 +144,7 @@ export const zhTWLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "內建設定檔",
      "agents.inheritContext": "繼承父工作階段上下文",
@@ -121,11 +123,11 @@ index 76e309a..9f3db48 100644
      "agents.duplicate": "建立副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index 91f3907..7b122e1 100644
+index 33356ab..1d371f9 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
-@@ -2038,7 +2038,7 @@ export async function startRpcSession(
-             noSkills: !subagentResources.loadSkills,
+@@ -2535,7 +2535,7 @@ export async function startRpcSession(
+             ...(subagentExtensionFactories.length > 0 ? { extensionFactories: subagentExtensionFactories } : {}),
              noPromptTemplates: true,
              noThemes: true,
 -            noContextFiles: true,
@@ -134,7 +136,7 @@ index 91f3907..7b122e1 100644
                ? {
                    systemPrompt: " ",
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 703c6e5..fae55a5 100644
+index 0df625c..af408a5 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
 @@ -41,6 +41,7 @@ test("integrated extension exposes the legacy-compatible tool names", async () =
@@ -153,36 +155,69 @@ index 703c6e5..fae55a5 100644
        description: "Find parser",
        run_in_background: true,
      },
+@@ -400,6 +402,24 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
+   assert.equal(result.content[0].text, "Subagent existing completed.\n\ncontinued");
+ });
+ 
++test("Agent resume rejects options that only apply to a new subagent", async () => {
++  const { tools } = await loadTools({
++    async start() { throw new Error("must not start"); },
++    async resume() { throw new Error("must not resume"); },
++    async get() { return null; },
++    async steer() {},
++  });
++  const result = await tools.get("Agent").execute(
++    "tool-call",
++    { resume: "existing", prompt: "Continue", description: "Continue", load_context_files: true },
++    undefined,
++    undefined,
++    { sessionManager: { getSessionId: () => "parent-session" } },
++  );
++  assert.equal(result.isError, true);
++  assert.match(result.content[0].text, /^load_context_files only apply to new subagents/);
++});
++
+ test("background Agent returns immediately and delegates one completion notification", async () => {
+   let finish;
+   const notifications = [];
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index e96056a..3cb56d5 100644
+index 99aec8a..6d32aee 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -45,6 +45,7 @@ export interface StartSubagentRequest {
-   thinking?: string;
-   maxTurns?: number;
-   inheritContext?: boolean;
+@@ -51,6 +51,7 @@ export interface StartSubagentRequest {
+   description: string;
+   runInBackground?: boolean;
+   model?: string;
 +  loadContextFiles?: boolean;
    isolation?: "worktree";
    signal?: AbortSignal;
    onUpdate?: (run: SubagentRunInfo) => void;
-@@ -172,6 +173,7 @@ export function createSubagentExtension(
-           thinking: Type.Optional(Type.String({ description: "Optional thinking level override." })),
-           max_turns: Type.Optional(Type.Number({ description: "Optional positive agent turn limit." })),
-           inherit_context: Type.Optional(Type.Boolean({ description: "Include the parent session's active conversation context." })),
-+          load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) independently of parent conversation context. Overrides the profile setting." })),
-           isolation: Type.Optional(Type.String({ description: "Run the subagent in an isolated git worktree." })),
+@@ -183,6 +184,7 @@ export function createSubagentExtension(
+           description: Type.String({ description: "Short activity label shown in the UI." }),
+           run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
++          load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
+           isolation: Type.Optional(Type.String({ description: 'Set to "worktree" to run the subagent in an isolated git worktree.' })),
          }),
          async execute(toolCallId, params, signal, onUpdate, ctx) {
-@@ -203,6 +205,7 @@ export function createSubagentExtension(
-               ...(params.thinking ? { thinking: params.thinking } : {}),
-               ...(params.max_turns ? { maxTurns: params.max_turns } : {}),
-               ...(params.inherit_context !== undefined ? { inheritContext: params.inherit_context } : {}),
+@@ -192,6 +194,7 @@ export function createSubagentExtension(
+               const creationOptions = [
+                 params.model?.trim() && "model",
+                 params.input_files?.length && "input_files",
++                params.load_context_files !== undefined && "load_context_files",
+                 params.isolation?.trim() && "isolation",
+               ].filter(Boolean);
+               if (creationOptions.length > 0) {
+@@ -221,6 +224,7 @@ export function createSubagentExtension(
+               description: params.description,
+               ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
+               ...(params.model ? { model: params.model } : {}),
 +              ...(params.load_context_files !== undefined ? { loadContextFiles: params.load_context_files } : {}),
                ...(params.isolation === "worktree" ? { isolation: "worktree" as const } : {}),
                signal,
                onUpdate: (run) => onUpdate?.({
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 7c4c8cc..952cd63 100644
+index 186988a..4b7cb2b 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
 @@ -1,4 +1,5 @@
@@ -191,23 +226,20 @@ index 7c4c8cc..952cd63 100644
  import test from "node:test";
  import { createJiti } from "jiti";
  
-@@ -6,6 +7,23 @@ const jiti = createJiti(import.meta.url);
+@@ -6,6 +7,20 @@ const jiti = createJiti(import.meta.url);
  const { createSubagentController } = await jiti.import("./subagent-runtime.ts");
  const { SUBAGENT_NOTIFICATION_PREFIX } = await jiti.import("./subagent-extension.ts");
  
-+test("context file loading defaults off and accepts independent per-call overrides", async () => {
++test("context file loading defaults off and a per-call value overrides the profile", async () => {
 +  const source = await readFile(new URL("./subagent-runtime.ts", import.meta.url), "utf8");
-+  const expression = source.match(/noContextFiles: ([^\n]+),/)[1];
-+  assert.equal(expression, "!(request.loadContextFiles ?? profile.loadContextFiles)");
-+  const noContextFiles = new Function("request", "profile", `return ${expression};`);
-+  for (const inheritContext of [false, true]) {
-+    for (const profileValue of [false, true]) {
-+      for (const override of [undefined, false, true]) {
-+        assert.equal(
-+          noContextFiles({ inheritContext, loadContextFiles: override }, { inheritContext, loadContextFiles: profileValue }),
-+          !(override ?? profileValue),
-+        );
-+      }
++  const expression = source.match(/const loadContextFiles = ([^;]+);/)[1];
++  assert.equal(expression, "request.loadContextFiles ?? profile.loadContextFiles");
++  assert.match(source, /noContextFiles: !loadContextFiles,/);
++  assert.match(source, /\.\.\.\(loadContextFiles \? \{ loadContextFiles: true as const \} : \{\}\)/);
++  const resolve = new Function("request", "profile", `return ${expression};`);
++  for (const profileValue of [false, true]) {
++    for (const override of [undefined, false, true]) {
++      assert.equal(resolve({ loadContextFiles: override }, { loadContextFiles: profileValue }), override ?? profileValue);
 +    }
 +  }
 +});
@@ -216,31 +248,39 @@ index 7c4c8cc..952cd63 100644
    return {
      sessionId: "child-session",
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index ca385ce..b700d11 100644
+index d313e75..197883b 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -225,7 +225,7 @@ export function createSubagentController(
-           noSkills: !profile.loadSkills,
+@@ -327,6 +327,7 @@ export function createSubagentController(
+         ...(skillsBinding.loaderOptions.extensionFactories ?? []),
+       ];
+       if (!chatOnly) initTheme();
++      const loadContextFiles = request.loadContextFiles ?? profile.loadContextFiles;
+       const services = await createAgentSessionServices({
+         cwd: childCwd,
+         agentDir,
+@@ -338,7 +339,7 @@ export function createSubagentController(
+           ...(extensionFactories.length > 0 ? { extensionFactories } : {}),
            noPromptTemplates: true,
            noThemes: true,
 -          noContextFiles: true,
-+          noContextFiles: !(request.loadContextFiles ?? profile.loadContextFiles),
++          noContextFiles: !loadContextFiles,
            ...(chatOnly || promptPlan.exactSystemPrompt !== undefined
              ? {
                  systemPrompt: " ",
-@@ -276,6 +276,7 @@ export function createSubagentController(
-           appendSystemPrompt: [...appendSystemPrompt],
+@@ -395,6 +396,7 @@ export function createSubagentController(
            tools: [...activeTools],
+           ...(codemodeEnabled ? { codemode: true as const } : {}),
+           ...(mcpEnabled ? { mcp: true as const } : {}),
++          ...(loadContextFiles ? { loadContextFiles: true as const } : {}),
            loadSkills: profile.loadSkills,
-+          loadContextFiles: request.loadContextFiles ?? profile.loadContextFiles,
-         loadExtensions: profile.loadExtensions,
-         ...(promptPlan.exactSystemPrompt !== undefined ? { exactSystemPrompt: promptPlan.exactSystemPrompt } : {}),
-         },
+           ...(profile.skills !== undefined ? { skills: [...profile.skills] } : {}),
+           loadExtensions: profile.loadExtensions,
 diff --git a/lib/subagents.test.mjs b/lib/subagents.test.mjs
-index bdb9d5c..e2248d2 100644
+index cffa088..ed62b12 100644
 --- a/lib/subagents.test.mjs
 +++ b/lib/subagents.test.mjs
-@@ -48,6 +48,7 @@ function profile(overrides = {}) {
+@@ -52,6 +52,7 @@ function profile(overrides = {}) {
      thinking: "high",
      maxTurns: 4.9,
      inheritContext: false,
@@ -248,7 +288,7 @@ index bdb9d5c..e2248d2 100644
      runInBackground: false,
      enabled: true,
      ...overrides,
-@@ -58,6 +59,7 @@ test("built-in profile IDs use lowercase kebab-case and read-only profiles canno
+@@ -62,6 +63,7 @@ test("built-in profile IDs use lowercase kebab-case and read-only profiles canno
    const profiles = listSubagentProfiles(testAgentDir);
    for (const builtin of profiles.filter((item) => item.scope === "builtin")) {
      assert.match(builtin.name, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
@@ -256,7 +296,7 @@ index bdb9d5c..e2248d2 100644
    }
    for (const name of ["explore", "plan"]) {
      const builtin = profiles.find((item) => item.name === name);
-@@ -96,6 +98,7 @@ test("project profiles override built-ins and round-trip their runtime settings"
+@@ -102,6 +104,7 @@ test("project profiles override built-ins and round-trip their runtime settings"
        thinking: "high",
        maxTurns: 8,
        inheritContext: true,
@@ -264,7 +304,7 @@ index bdb9d5c..e2248d2 100644
        runInBackground: true,
        enabled: true,
      });
-@@ -109,10 +112,12 @@ test("project profiles override built-ins and round-trip their runtime settings"
+@@ -115,10 +118,12 @@ test("project profiles override built-ins and round-trip their runtime settings"
      assert.equal(profile.thinking, "high");
      assert.equal(profile.maxTurns, 8);
      assert.equal(profile.inheritContext, true);
@@ -277,7 +317,7 @@ index bdb9d5c..e2248d2 100644
      assert.match(source, /load_skills: true/);
      assert.match(source, /load_extensions: true/);
      assert.match(source, /Read carefully and report findings\./);
-@@ -861,6 +866,7 @@ test("profile flags fall back to the pi-subagents spellings", async () => {
+@@ -1140,6 +1145,7 @@ test("profile flags fall back to the pi-subagents spellings", async () => {
      );
  
      const loaded = listSubagentProfiles(cwd).find((item) => item.name === "legacy-flags");
@@ -286,10 +326,10 @@ index bdb9d5c..e2248d2 100644
      assert.equal(loaded.loadExtensions, true);
    } finally {
 diff --git a/lib/subagents.ts b/lib/subagents.ts
-index 894ddd7..ca85a8e 100644
+index a4c8e1f..0bfb8cf 100644
 --- a/lib/subagents.ts
 +++ b/lib/subagents.ts
-@@ -35,6 +35,7 @@ export interface SubagentProfile {
+@@ -45,6 +45,7 @@ export interface SubagentProfile {
    thinking?: ThinkingLevel;
    maxTurns?: number;
    inheritContext: boolean;
@@ -297,31 +337,31 @@ index 894ddd7..ca85a8e 100644
    runInBackground: boolean;
    promptMode: "replace" | "append";
    color?: string;
-@@ -61,6 +62,7 @@ export interface SubagentMetadata {
+@@ -80,6 +81,7 @@ export interface SubagentResourceSnapshot {
+   loadExtensions: boolean;
+   codemode?: true;
+   mcp?: true;
++  loadContextFiles?: true;
+   /** Extensions load without `ext:` selectors: every tool they register is admitted (#883). */
+   allExtensionTools?: true;
+   exactSystemPrompt?: string;
+@@ -94,6 +96,7 @@ export interface SubagentSessionResources {
+   loadExtensions: boolean;
+   codemode?: true;
+   mcp?: true;
++  loadContextFiles?: true;
+   allExtensionTools?: true;
+   exactSystemPrompt?: string;
  }
- 
- export interface SubagentResourceSnapshot {
-+  loadContextFiles?: boolean;
-   version: 1;
-   appendSystemPrompt: string[];
-   tools: string[];
-@@ -70,6 +72,7 @@ export interface SubagentResourceSnapshot {
- }
- 
- export interface SubagentSessionResources {
-+  loadContextFiles?: boolean;
-   appendSystemPrompt: string[];
-   tools: string[];
-   loadSkills: boolean;
-@@ -130,6 +133,7 @@ const MANAGED_FRONTMATTER_KEYS = new Set([
-   "load_extensions",
+@@ -158,6 +161,7 @@ const MANAGED_FRONTMATTER_KEYS = new Set([
+   "mcp",
    "enabled",
    "inherit_context",
 +  "load_context_files",
    "run_in_background",
    "model",
    "thinking",
-@@ -152,6 +156,7 @@ const OWNED_ALIAS_VALUES = new Set(["none", "all", "true", "false"]);
+@@ -203,6 +207,7 @@ function validateSavedMcp(value: unknown): SubagentMcp | undefined {
  const BUILTIN_PROFILES: SubagentProfile[] = [
    {
      name: "general-purpose",
@@ -329,7 +369,7 @@ index 894ddd7..ca85a8e 100644
      displayName: "General purpose",
      description: "Handle a focused implementation or investigation task",
      systemPrompt: "Work autonomously on the delegated task. Keep the final answer concise and include important files, decisions, and remaining risks.",
-@@ -166,6 +171,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
+@@ -219,6 +224,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
    },
    {
      name: "explore",
@@ -337,7 +377,7 @@ index 894ddd7..ca85a8e 100644
      displayName: "Explore",
      description: "Quickly inspect a codebase without modifying it",
      systemPrompt: "Explore the codebase to answer the delegated question. Do not modify files. Report concrete findings with file paths and relevant symbols.",
-@@ -180,6 +186,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
+@@ -235,6 +241,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
    },
    {
      name: "plan",
@@ -345,7 +385,7 @@ index 894ddd7..ca85a8e 100644
      displayName: "Plan",
      description: "Design an implementation plan without modifying files",
      systemPrompt: "Produce an implementation-ready plan for the delegated task. Inspect the repository as needed, do not modify files, and call out dependencies, risks, and verification steps.",
-@@ -318,6 +325,7 @@ function parseProfileFile(filePath: string, scope: SubagentScope): SubagentProfi
+@@ -420,6 +427,7 @@ function parseProfileFile(filePath: string, scope: SubagentScope): SubagentProfi
        ...(thinkingValue && THINKING_LEVELS.has(thinkingValue) ? { thinking: thinkingValue } : {}),
        ...(maxTurnsValue && maxTurnsValue > 0 ? { maxTurns: maxTurnsValue } : {}),
        inheritContext: booleanValue(data?.inherit_context, false),
@@ -353,19 +393,27 @@ index 894ddd7..ca85a8e 100644
        runInBackground: booleanValue(data?.run_in_background, false),
        promptMode: data?.prompt_mode === "replace" ? "replace" : "append",
        ...(stringValue(data?.color) ? { color: stringValue(data?.color) } : {}),
-@@ -459,6 +467,7 @@ export function saveSubagentProfile(
-     load_extensions: loadExtensions,
+@@ -567,6 +575,7 @@ export function saveSubagentProfile(
+     ...(mcp === "on" || stored.mcp !== undefined ? { mcp } : {}),
      enabled: profile.enabled,
      inherit_context: profile.inheritContext,
 +    load_context_files: profile.loadContextFiles,
      run_in_background: profile.runInBackground,
      prompt_mode: promptMode,
    };
-@@ -557,6 +566,7 @@ export function readSubagentSessionResources(
-       tools: [...new Set(snapshot.tools)],
-       loadSkills,
+@@ -675,6 +684,7 @@ export function readSubagentSessionResources(
+   const loadExtensions = isRecord(snapshot) && snapshot.loadExtensions === true;
+   const codemode = isRecord(snapshot) && snapshot.codemode === true;
+   const mcp = isRecord(snapshot) && snapshot.mcp === true;
++  const loadContextFiles = isRecord(snapshot) && snapshot.loadContextFiles === true;
+   if (
+     isRecord(snapshot)
+     && snapshot.version === 1
+@@ -699,6 +709,7 @@ export function readSubagentSessionResources(
        loadExtensions,
-+      ...(snapshot.loadContextFiles === true ? { loadContextFiles: true } : {}),
+       ...(codemode ? { codemode: true as const } : {}),
+       ...(mcp ? { mcp: true as const } : {}),
++      ...(loadContextFiles ? { loadContextFiles: true as const } : {}),
+       ...(loadExtensions && snapshot.allExtensionTools === true ? { allExtensionTools: true as const } : {}),
        ...(typeof snapshot.exactSystemPrompt === "string" ? { exactSystemPrompt: snapshot.exactSystemPrompt } : {}),
      };
-   }

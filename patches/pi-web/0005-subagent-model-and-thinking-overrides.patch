@@ -1,8 +1,8 @@
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index b561cd8..878cf1a 100644
+index 1d371f9..6ad4579 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
-@@ -1729,8 +1729,8 @@ export function getSubagentRun(sessionId: string) {
+@@ -2103,8 +2103,8 @@ export function getSubagentRun(sessionId: string) {
    return SUBAGENT_CONTROLLER.get(sessionId);
  }
  
@@ -13,11 +13,96 @@ index b561cd8..878cf1a 100644
  }
  
  export function abortSubagent(sessionId: string) {
+diff --git a/lib/subagent-extension.integration.test.mjs b/lib/subagent-extension.integration.test.mjs
+index e4a7fd5..4b19ff2 100644
+--- a/lib/subagent-extension.integration.test.mjs
++++ b/lib/subagent-extension.integration.test.mjs
+@@ -188,15 +188,17 @@ test("subagent control tools are declared to the model but cannot be called from
+   }
+ });
+ 
+-test("Agent resume rejects the remaining creation overrides before dispatch", async () => {
++test("Agent resume rejects the remaining creation overrides before dispatch and forwards a model switch", async () => {
+   const dir = await mkdtemp(join(tmpdir(), "pi-web-subagent-resume-"));
+   let session;
+   try {
+     const faux = fauxProvider({ models: [{ id: "faux-model" }] });
+     const { calls, runtime } = recordingRuntime();
+     const completed = await runtime.get("child-session");
++    const resumed = [];
+     runtime.resume = async (request) => {
+       calls.push(`resume:${request.sessionId}`);
++      resumed.push(request);
+       return { run: completed, completion: Promise.resolve(completed) };
+     };
+     session = await createSession(dir, faux, [createSubagentExtension(runtime, () => [])]);
+@@ -212,10 +214,9 @@ test("Agent resume rejects the remaining creation overrides before dispatch", as
+       );
+     };
+ 
+-    // `model` is offered on a new subagent, so a resume call can carry it; it must still be rejected
+-    // rather than silently switching the model under the resumed session.
++    // Options that shape a new session cannot change a resumed one; they must be rejected, not ignored.
+     for (const override of [
+-      { model: "different-provider/different-model" }, { input_files: ["fact.txt"] }, { isolation: "worktree" },
++      { input_files: ["fact.txt"] }, { isolation: "worktree" }, { load_context_files: true },
+     ]) {
+       const rejected = await invoke(override);
+       const name = Object.keys(override)[0];
+@@ -228,11 +229,19 @@ test("Agent resume rejects the remaining creation overrides before dispatch", as
+     // against the old schema still validates, and the resumed child keeps its own settings.
+     const result = await invoke({
+       model: "", input_files: [], isolation: "", run_in_background: false,
+-      thinking: "low", max_turns: 8, inherit_context: true,
++      thinking: "", max_turns: 8, inherit_context: true,
+     });
+     assert.equal(result?.isError, false);
+     assert.match(textOf(result), /Subagent child-session completed/);
+     assert.deepEqual(calls, ["get:child-session", "resume:child-session"]);
++    assert.equal(resumed[0].model, undefined);
++    assert.equal(resumed[0].thinking, undefined);
++
++    // A model and thinking level on a resume switch the resumed session (pi-web-container 0005).
++    const switched = await invoke({ model: "different-provider/different-model:low", thinking: "high" });
++    assert.equal(switched?.isError, false);
++    assert.equal(resumed[1].model, "different-provider/different-model:low");
++    assert.equal(resumed[1].thinking, "high");
+   } finally {
+     session?.dispose();
+     await rm(dir, { recursive: true, force: true });
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 0dd15d8..14c3642 100644
+index ceec376..165d144 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
-@@ -435,16 +435,20 @@ test("steer_subagent returns success and runtime failures", async () => {
+@@ -430,6 +430,27 @@ test("Agent forwards per-call profile overrides to a new subagent and ignores th
+   assert.equal(resumed.inheritContext, undefined);
+ });
+ 
++test("Agent resume forwards a model and thinking switch to the resumed session", async () => {
++  let resumed;
++  const finished = run({ sessionId: "existing", status: "completed", result: "ok" });
++  const { tools } = await loadTools({
++    async start() { throw new Error("must not start"); },
++    async resume(request) { resumed = request; return { run: finished, completion: Promise.resolve(finished) }; },
++    async get() { return null; },
++    async steer() {},
++  });
++  const context = { sessionManager: { getSessionId: () => "parent-session" } };
++  await tools.get("Agent").execute(
++    "tool-call",
++    { resume: "existing", prompt: "Continue", description: "Continue", model: "test/new:low", thinking: "high" },
++    undefined,
++    undefined,
++    context,
++  );
++  assert.equal(resumed.model, "test/new:low");
++  assert.equal(resumed.thinking, "high");
++});
++
+ test("Agent resume rejects options that only apply to a new subagent", async () => {
+   const { tools } = await loadTools({
+     async start() { throw new Error("must not start"); },
+@@ -537,15 +558,19 @@ test("steer_subagent returns success and runtime failures", async () => {
    const { tools } = await loadTools({
      async start() { throw new Error("unused"); },
      async get() { return null; },
@@ -31,30 +116,32 @@ index 0dd15d8..14c3642 100644
    const tool = tools.get("steer_subagent");
    const success = await tool.execute("call", { agent_id: "child-session", message: "focus" });
 -  assert.deepEqual(calls[0], ["child-session", "focus"]);
+-  assert.match(success.content[0].text, /sent/);
 +  assert.deepEqual(calls[0], ["child-session", "focus", undefined, undefined]);
-   assert.match(success.content[0].text, /sent/);
- 
++  assert.equal(success.content[0].text, "Steering message sent to child-session.");
++
 +  const switched = await tool.execute("call", { agent_id: "child-session", message: "focus", model: "projectk-openai/gpt-6.1-sol", thinking: "high" });
 +  assert.deepEqual(calls[1], ["child-session", "focus", "projectk-openai/gpt-6.1-sol", "high"]);
-+  assert.match(switched.content[0].text, /Switched to projectk-openai\/gpt-6\.1-sol with thinking high/);
-+
++  assert.match(switched.content[0].text, /Switched to projectk-openai\/gpt-6\.1-sol with thinking high from the next turn\./);
+ 
    const failure = await tool.execute("call", { agent_id: "child-session", message: "fail" });
    assert.equal(failure.isError, true);
-   assert.equal(failure.content[0].text, "not running");
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index 34f4706..d2acd27 100644
+index e4afd04..6a3cd50 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -57,6 +57,8 @@ export interface ResumeSubagentRequest {
-   sessionId: string;
+@@ -67,6 +67,10 @@ export interface ResumeSubagentRequest {
    task: string;
    description: string;
-+  model?: string;
-+  thinking?: string;
    runInBackground?: boolean;
++  /** Switch the resumed session to this model (`provider/modelId[:level]`) before the task. */
++  model?: string;
++  /** Switch the resumed session to this thinking level before the task; beats a `:level` suffix. */
++  thinking?: string;
    signal?: AbortSignal;
    onUpdate?: (run: SubagentRunInfo) => void;
-@@ -71,7 +73,7 @@ export interface SubagentExtensionRuntime {
+ }
+@@ -80,7 +84,7 @@ export interface SubagentExtensionRuntime {
    start(request: StartSubagentRequest): Promise<SubagentExecution>;
    resume(request: ResumeSubagentRequest): Promise<SubagentExecution>;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
@@ -63,52 +150,86 @@ index 34f4706..d2acd27 100644
    notifyParent(run: SubagentRunInfo): Promise<void>;
    markResultConsumed(run: Pick<SubagentRunInfo, "sessionId" | "completedAt">): void;
  }
-@@ -190,6 +192,8 @@ export function createSubagentExtension(
-                   sessionId: resume,
+@@ -179,15 +183,15 @@ export function createSubagentExtension(
+         parameters: Type.Object({
+           subagent_type: Type.Optional(Type.String({ description: `Configured agent profile. Available types: ${availableTypes}. Default: general-purpose.` })),
+           prompt: Type.String({ description: "The complete task for the subagent." }),
+-          resume: Type.Optional(Type.String({ description: "Existing session ID to continue with its current profile, model, thinking, and context. Omit new-session options." })),
++          resume: Type.Optional(Type.String({ description: "Existing session ID to continue with its current profile and context. It keeps its model and thinking unless model or thinking is given. Omit the other new-session options." })),
+           input_files: Type.Optional(Type.Array(Type.String(), {
+             description: "UTF-8 text files under the session cwd to include with the task.",
+             maxItems: MAX_SUBAGENT_INPUT_FILES,
+           })),
+           description: Type.String({ description: "Short activity label shown in the UI." }),
+           run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+-          model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
+-          thinking: Type.Optional(Type.String({ description: "Optional thinking level override for a new subagent (off, minimal, low, medium, high, xhigh, max). Beats a model's \":<level>\" suffix and the profile setting." })),
++          model: Type.Optional(Type.String({ description: 'Optional provider/modelId override, also when resuming. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level, e.g. "provider/model:high".' })),
++          thinking: Type.Optional(Type.String({ description: "Optional thinking level override (off, minimal, low, medium, high, xhigh, max) for a new or a resumed subagent. Beats a model's \":<level>\" suffix and the profile setting." })),
+           max_turns: Type.Optional(Type.Number({ description: "Optional positive turn limit for a new subagent. Overrides the profile setting." })),
+           inherit_context: Type.Optional(Type.Boolean({ description: "Include the parent session's active conversation context in a new subagent. Overrides the profile setting." })),
+           load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
+@@ -198,7 +202,6 @@ export function createSubagentExtension(
+             const resume = params.resume?.trim();
+             if (resume) {
+               const creationOptions = [
+-                params.model?.trim() && "model",
+                 params.input_files?.length && "input_files",
+                 params.load_context_files !== undefined && "load_context_files",
+                 params.isolation?.trim() && "isolation",
+@@ -215,6 +218,8 @@ export function createSubagentExtension(
                    task: params.prompt,
                    description: params.description,
-+                  ...(params.model ? { model: params.model } : {}),
-+                  ...(params.thinking ? { thinking: params.thinking } : {}),
                    ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
++                  ...(params.model?.trim() ? { model: params.model } : {}),
++                  ...(params.thinking?.trim() ? { thinking: params.thinking } : {}),
                    signal,
                    onUpdate: (run) => onUpdate?.({
-@@ -290,16 +294,19 @@ export function createSubagentExtension(
+                     content: [{ type: "text", text: `${run.profile}: ${run.description} (${run.status})` }],
+@@ -315,16 +320,23 @@ export function createSubagentExtension(
        pi.registerTool(defineTool({
          name: "steer_subagent",
          label: "Steer agent",
 -        description: "Send a steering message to a currently running subagent session.",
-+        description: "Send a steering message to a currently running subagent session, optionally switching its model first.",
++        description: "Send a steering message to a currently running subagent session, optionally switching its model or thinking level first.",
          exposure: SUBAGENT_TOOL_EXPOSURE,
          parameters: Type.Object({
            agent_id: Type.String({ description: "Subagent session ID." }),
            message: Type.String({ description: "Instruction to inject after the current tool execution." }),
-+          model: Type.Optional(Type.String({ description: "Optional provider/modelId to switch the subagent to before delivering the message. Applies from the next turn." })),
-+          thinking: Type.Optional(Type.String({ description: "Optional thinking level to apply before the message. Applies from the next turn." })),
++          model: Type.Optional(Type.String({ description: 'Optional provider/modelId to switch to before delivering the message, applied from the next turn. Append ":<level>" to also set the thinking level.' })),
++          thinking: Type.Optional(Type.String({ description: "Optional thinking level (off, minimal, low, medium, high, xhigh, max) to apply before the message, from the next turn." })),
          }),
          async execute(_toolCallId, params) {
            try {
 -            await runtime.steer(params.agent_id, params.message);
 -            return { content: [{ type: "text", text: `Steering message sent to ${params.agent_id}.` }], details: undefined };
-+            await runtime.steer(params.agent_id, params.message, params.model, params.thinking);
-+            const switched = `${params.model ? ` Switched to ${params.model}` : ""}${params.thinking ? ` with thinking ${params.thinking}` : ""}${params.model || params.thinking ? " from the next turn." : ""}`;
++            const model = params.model?.trim() || undefined;
++            const thinking = params.thinking?.trim() || undefined;
++            await runtime.steer(params.agent_id, params.message, model, thinking);
++            const switched = model || thinking
++              ? ` Switched${model ? ` to ${model}` : ""}${thinking ? ` with thinking ${thinking}` : ""} from the next turn.`
++              : "";
 +            return { content: [{ type: "text", text: `Steering message sent to ${params.agent_id}.${switched}` }], details: undefined };
            } catch (error) {
              return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], details: undefined, isError: true };
            }
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 76ed117..0fd8223 100644
+index ea62036..2a15c28 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
-@@ -39,6 +39,47 @@ test("soft turn limit steers once and never aborts later tool turns", async () =
-   assert.equal(aborted, 0);
+@@ -317,6 +317,103 @@ test("a resumed run that fails right away still notifies after the parent inspec
+   assert.deepEqual(delivered[1].options, { deliverAs: "followUp", triggerTurn: true });
  });
  
-+test("steer switches the subagent model before delivering the message", async () => {
++function modelRuntime(models) {
++  return {
++    getModel: (provider, id) => models.find((model) => model.provider === provider && model.id === id),
++    getModels: () => models,
++  };
++}
++
++test("steer switches the subagent model and thinking before delivering the message", async () => {
 +  const events = [];
-+  const models = [
-+    { id: "old", provider: "test" },
-+    { id: "new", provider: "test" },
-+  ];
 +  const child = {
 +    sessionFile: "/tmp/child.jsonl",
 +    cwd: "/tmp",
@@ -116,10 +237,7 @@ index 76ed117..0fd8223 100644
 +    isRunning: () => true,
 +    waitUntilReady: async () => {},
 +    inner: {
-+      modelRuntime: {
-+        getModel: (provider, id) => models.find((model) => model.provider === provider && model.id === id),
-+        getModels: () => models,
-+      },
++      modelRuntime: modelRuntime([{ id: "old", provider: "test" }, { id: "new", provider: "test" }]),
 +      setModel: async (model) => events.push(["model", model.id]),
 +      setThinkingLevel: (level) => events.push(["thinking", level]),
 +      steer: async (message) => events.push(["steer", message]),
@@ -134,26 +252,24 @@ index 76ed117..0fd8223 100644
 +    isBuiltInSubagentsEnabled: () => true,
 +  });
 +  await controller.extensionRuntime.steer("child", "  keep going  ", "test/new", "high");
-+  assert.deepEqual(events, [["model", "new"], ["thinking", "high"], ["steer", "keep going"]]);
++  assert.deepEqual(events.splice(0), [["model", "new"], ["thinking", "high"], ["steer", "keep going"]]);
 +  await controller.extensionRuntime.steer("child", "again");
-+  assert.deepEqual(events[3], ["steer", "again"]);
++  assert.deepEqual(events.splice(0), [["steer", "again"]]);
 +  await controller.extensionRuntime.steer("child", "later", undefined, "max");
-+  assert.deepEqual(events[4], ["thinking", "max"]);
-+  assert.deepEqual(events[5], ["steer", "later"]);
++  assert.deepEqual(events.splice(0), [["thinking", "max"], ["steer", "later"]]);
++  // A `:level` suffix sets the level with the model; an explicit thinking beats it.
++  await controller.extensionRuntime.steer("child", "suffix", "test/new:low");
++  assert.deepEqual(events.splice(0), [["model", "new"], ["thinking", "low"], ["steer", "suffix"]]);
++  await controller.extensionRuntime.steer("child", "both", "test/new:low", "xhigh");
++  assert.deepEqual(events.splice(0), [["model", "new"], ["thinking", "xhigh"], ["steer", "both"]]);
++  // Bad values fail before anything is switched or sent.
 +  await assert.rejects(controller.extensionRuntime.steer("child", "x", "test/missing"), /Subagent model not found/);
 +  await assert.rejects(controller.extensionRuntime.steer("child", "x", undefined, "turbo"), /Invalid subagent thinking level/);
++  assert.deepEqual(events, []);
 +});
 +
- function completedRun() {
-   return {
-     sessionId: "child-session",
-@@ -322,6 +363,60 @@ test("a resumed run that fails right away still notifies after the parent inspec
-   assert.deepEqual(delivered[1].options, { deliverAs: "followUp", triggerTurn: true });
- });
- 
-+test("resume applies a new model and thinking before the task", async () => {
++test("resume switches the model and thinking before the task, and rejects bad values before queueing", async () => {
 +  const events = [];
-+  const models = [{ id: "new", provider: "test" }];
 +  const entries = [
 +    { type: "custom", customType: "pi-web:subagent", data: {
 +      version: 1,
@@ -175,7 +291,7 @@ index 76ed117..0fd8223 100644
 +    sessionId: "child",
 +    sessionFile: "/tmp/child.jsonl",
 +    sessionManager: { getEntries: () => entries, appendCustomEntry: (type, data) => entries.push({ type: "custom", customType: type, data }) },
-+    modelRuntime: { getModel: (provider, id) => models.find((model) => model.provider === provider && model.id === id), getModels: () => models },
++    modelRuntime: modelRuntime([{ id: "new", provider: "test" }]),
 +    setModel: async (model) => events.push(["model", model.id]),
 +    setThinkingLevel: (level) => events.push(["thinking", level]),
 +    prompt: async (task) => { events.push(["prompt", task]); },
@@ -192,15 +308,12 @@ index 76ed117..0fd8223 100644
 +    invalidateSessionList: () => {},
 +    isBuiltInSubagentsEnabled: () => true,
 +  });
-+  const execution = await controller.extensionRuntime.resume({
-+    parentContext: parent.inner,
-+    parentToolCallId: "new-call",
-+    sessionId: "child",
-+    task: "continue this",
-+    description: "Continue task",
-+    model: "test/new",
-+    thinking: "high",
-+  });
++  const request = { parentContext: parent.inner, parentToolCallId: "new-call", sessionId: "child", task: "continue this", description: "Continue task" };
++  await assert.rejects(controller.extensionRuntime.resume({ ...request, model: "test/missing" }), /Subagent model not found/);
++  await assert.rejects(controller.extensionRuntime.resume({ ...request, thinking: "turbo" }), /Invalid subagent thinking level/);
++  assert.deepEqual(events, []);
++
++  const execution = await controller.extensionRuntime.resume({ ...request, model: "test/new:low", thinking: "high" });
 +  assert.equal((await execution.completion).status, "completed");
 +  assert.deepEqual(events, [["model", "new"], ["thinking", "high"], ["prompt", "continue this"]]);
 +});
@@ -209,10 +322,10 @@ index 76ed117..0fd8223 100644
    const controller = createSubagentController({
      getSession: (id) => id === "parent" ? { inner: { sessionManager: { getSessionId: () => "parent" } }, sessionFile: "/tmp/parent.jsonl", cwd: "/tmp", isAlive: () => true, isRunning: () => false, waitUntilReady: async () => {} } : undefined,
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index b12f776..92bca8c 100644
+index 10c871f..213c3b0 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -65,7 +65,7 @@ export interface SubagentRuntimeDependencies {
+@@ -74,7 +74,7 @@ export interface SubagentRuntimeDependencies {
  export interface SubagentController {
    readonly extensionRuntime: SubagentExtensionRuntime;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
@@ -221,34 +334,64 @@ index b12f776..92bca8c 100644
    abort(sessionId: string): Promise<void>;
  }
  
-@@ -151,6 +151,13 @@ function settleOrphanedRun(run: SubagentRunInfo): SubagentRunInfo {
-   return run.status === "running" || run.status === "queued" ? { ...run, status: "interrupted" } : run;
+@@ -222,6 +222,40 @@ function parseSubagentModel(runtime: ModelRuntime, value: string | undefined) {
+   throw new Error(`Subagent model not found: ${requested}`);
  }
  
-+function parseSubagentThinking(value: string | undefined): ThinkingLevel | undefined {
-+  if (!value?.trim()) return undefined;
-+  const requested = value.trim() as ThinkingLevel;
-+  if (!THINKING_LEVELS.has(requested)) throw new Error(`Invalid subagent thinking level: ${value}`);
-+  return requested;
++interface SubagentModelSwitch {
++  model?: NonNullable<ReturnType<typeof findSubagentModel>>;
++  thinkingLevel?: ThinkingLevel;
 +}
 +
- function parseSubagentModel(runtime: ModelRuntime, value: string | undefined) {
-   if (!value?.trim()) return undefined;
-   const requested = value.trim();
-@@ -531,6 +538,12 @@ export function createSubagentController(
-       request.onUpdate?.(stored.run);
++/**
++ * The model and thinking level a resume or steer switches a running subagent to. `model` takes
++ * pi's `provider/modelId[:level]` form like a new run's; an explicit `thinking` beats the suffix.
++ * Resolved before anything is queued or sent, so an unknown model or level fails the call itself.
++ */
++function resolveSubagentSwitch(
++  session: AgentSessionLike,
++  model: string | undefined,
++  thinking: string | undefined,
++): SubagentModelSwitch {
++  const runtime = (session as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
++  const parsed = parseSubagentModel(runtime, model);
++  const requestedThinking = thinking?.trim();
++  if (requestedThinking && !THINKING_LEVELS.has(requestedThinking as ThinkingLevel)) {
++    throw new Error(`Invalid subagent thinking level: ${requestedThinking}`);
++  }
++  const thinkingLevel = (requestedThinking as ThinkingLevel | undefined) || parsed?.thinkingLevel;
++  return {
++    ...(parsed ? { model: parsed.model } : {}),
++    ...(thinkingLevel ? { thinkingLevel } : {}),
++  };
++}
++
++async function applySubagentSwitch(session: AgentSessionLike, change: SubagentModelSwitch): Promise<void> {
++  // Model first: setModel re-derives the thinking level, so an explicit level must follow it.
++  if (change.model) await session.setModel(change.model as unknown as Parameters<AgentSessionLike["setModel"]>[0]);
++  if (change.thinkingLevel) session.setThinkingLevel(change.thinkingLevel);
++}
++
+ function parentContextText(parent: HostSession): string {
+   const messages = parent.inner.sessionManager.buildSessionContext().messages;
+   const serialized = JSON.stringify(messages);
+@@ -640,6 +674,7 @@ export function createSubagentController(
+     if (!wrapper?.isAlive()) wrapper = await dependencies.reopenSession(request.sessionId, sessionPath);
+     if (!wrapper.isAlive()) throw new Error("Subagent session is no longer available");
+     if (wrapper.isRunning()) throw new Error("Subagent is already running");
++    const modelSwitch = resolveSubagentSwitch(wrapper.inner, request.model, request.thinking);
+ 
+     const runInBackground = request.runInBackground ?? existing.runInBackground;
+     const initialRun: SubagentRunInfo = {
+@@ -684,6 +719,7 @@ export function createSubagentController(
        let result: SubagentRunInfo;
        try {
-+        const modelRuntime = (wrapper!.inner as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
-+        const nextModel = parseSubagentModel(modelRuntime, request.model);
-+        // Model first: setModel re-derives the thinking level, so thinking must be applied after it.
-+        if (nextModel) await wrapper!.inner.setModel(nextModel);
-+        const nextThinking = parseSubagentThinking(request.thinking);
-+        if (nextThinking) wrapper!.inner.setThinkingLevel(nextThinking);
+         await prepareChildMcp(wrapper, stored);
++        await applySubagentSwitch(wrapper!.inner, modelSwitch);
          await wrapper!.inner.prompt(request.task, { source: "rpc" });
          const text = wrapper!.inner.getLastAssistantText()?.trim();
-         const providerError = stored.abortRequested ? undefined : lastAssistantError(manager);
-@@ -605,10 +618,17 @@ export function createSubagentController(
+         const stop = stored.abortRequested ? undefined : lastAssistantStop(manager);
+@@ -760,11 +796,13 @@ export function createSubagentController(
      return run && settleOrphanedRun(run);
    }
  
@@ -256,14 +399,10 @@ index b12f776..92bca8c 100644
 +  async function steer(sessionId: string, message: string, model?: string, thinking?: string): Promise<void> {
      const wrapper = dependencies.getSession(sessionId);
      if (!wrapper?.isAlive() || !wrapper.isRunning()) throw new Error("Subagent is not running");
+     if (getSubagentRuns().get(sessionId)?.turnLimitReached) throw new Error("Subagent reached its turn limit and is stopping; resume it to continue");
      if (!message.trim()) throw new Error("Steering message is required");
-+    // Switch before steering so the queued message is answered with the new settings on the next turn.
-+    const modelRuntime = (wrapper.inner as unknown as { modelRuntime: ModelRuntime }).modelRuntime;
-+    const nextModel = parseSubagentModel(modelRuntime, model);
-+    const nextThinking = parseSubagentThinking(thinking);
-+    // Model first: setModel re-derives the thinking level, so thinking must be applied after it.
-+    if (nextModel) await wrapper.inner.setModel(nextModel);
-+    if (nextThinking) wrapper.inner.setThinkingLevel(nextThinking);
++    // Switch before steering, so the queued message is answered with the new settings next turn.
++    await applySubagentSwitch(wrapper.inner, resolveSubagentSwitch(wrapper.inner, model, thinking));
      await wrapper.inner.steer(message.trim());
    }
  
