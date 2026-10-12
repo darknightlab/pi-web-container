@@ -13,7 +13,7 @@
       "description": "Automate web pages in the container's shared Chromium browser.",
       "args": [
         "-c",
-        "p=$(basename \"$(readlink \"$CHROMIUM_USER_DATA_DIR/SingletonLock\" 2>/dev/null)\" | awk -F- '{print $NF}'); [ -n \"$p\" ] && [ -d \"/proc/$p\" ] || npx -y @playwright/cli open -s=shared --profile \"$CHROMIUM_USER_DATA_DIR\" --headed >/dev/null 2>&1; exec npx -y @playwright/mcp --endpoint shared"
+        "p=$(basename \"$(readlink \"$CHROMIUM_USER_DATA_DIR/SingletonLock\" 2>/dev/null)\" | awk -F- '{print $NF}'); running=false; case \"$p\" in ''|*[!0-9]*) ;; *) exe=$(readlink \"/proc/$p/exe\" 2>/dev/null); case \"${exe##*/}\" in chromium|chromium-browser|chrome) running=true ;; esac ;; esac; if [ \"$running\" != true ] || ! timeout -k 2s 15s npx -y @playwright/cli -s=shared tab-list --json >/dev/null 2>&1; then timeout -k 5s 60s npx -y @playwright/cli open -s=shared --profile \"$CHROMIUM_USER_DATA_DIR\" --headed >&2 || exit $?; fi; exec npx -y @playwright/mcp --endpoint shared"
       ],
       "env": {
         "CHROMIUM_USER_DATA_DIR": "${HOME}/.config/chromium",
