@@ -30,13 +30,14 @@ index 0000000..796b630
 +  });
 +}
 diff --git a/app/globals.css b/app/globals.css
-index d6b5535..531f084 100644
+index 5e7936f..4e3291a 100644
 --- a/app/globals.css
 +++ b/app/globals.css
-@@ -479,6 +479,111 @@ html[data-keyboard-open] .terminal-extra-keys {
-   height: 100%;
+@@ -2783,3 +2783,109 @@ span.token.table {
+     display: none !important;
+   }
  }
- 
++
 +.vnc-panel {
 +  display: grid;
 +  grid-template-rows: 38px minmax(0, 1fr);
@@ -142,11 +143,8 @@ index d6b5535..531f084 100644
 +  text-align: center;
 +}
 +
- .terminal-xterm .xterm-viewport {
-   background-color: #111318;
- }
 diff --git a/components/AppShell.tsx b/components/AppShell.tsx
-index c8c4ba9..057fdbe 100644
+index e02bdd8..a29875c 100644
 --- a/components/AppShell.tsx
 +++ b/components/AppShell.tsx
 @@ -19,6 +19,8 @@ import { AgentSessionPanel } from "./AgentSessionPanel";
@@ -158,7 +156,7 @@ index c8c4ba9..057fdbe 100644
  import { useTheme } from "@/hooks/useTheme";
  import { useFontPreferences } from "@/hooks/useFontPreferences";
  import { useI18n } from "@/hooks/useI18n";
-@@ -529,6 +531,8 @@ export function AppShell() {
+@@ -534,6 +536,8 @@ export function AppShell() {
    const fileWorkspaceGenerationRef = useRef(0);
    const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
    const [terminalsRestored, setTerminalsRestored] = useState(false);
@@ -167,7 +165,7 @@ index c8c4ba9..057fdbe 100644
    // Subagent work tabs are session-scoped and transient: no persistence, and
    // they are dropped when the project changes (they belong to its sessions).
    const [agentTabs, setAgentTabs] = useState<{ sessionId: string; label: string }[]>([]);
-@@ -541,6 +545,12 @@ export function AppShell() {
+@@ -546,6 +550,12 @@ export function AppShell() {
        kind: "terminal" as const,
        closing: Boolean(tab.closing),
      })),
@@ -180,7 +178,7 @@ index c8c4ba9..057fdbe 100644
      ...agentTabs.map((tab) => ({
        id: `agent:${tab.sessionId}`,
        label: tab.label,
-@@ -551,11 +561,15 @@ export function AppShell() {
+@@ -556,11 +566,15 @@ export function AppShell() {
  
    useEffect(() => {
      try {
@@ -200,7 +198,7 @@ index c8c4ba9..057fdbe 100644
        }
      } catch { /* storage is optional */ }
      setTerminalsRestored(true);
-@@ -566,11 +580,12 @@ export function AppShell() {
+@@ -571,11 +585,12 @@ export function AppShell() {
      try {
        window.sessionStorage.setItem(TERMINAL_TABS_KEY, JSON.stringify({
          tabs: terminalTabs.map(({ id, cwd }) => ({ id, cwd })),
@@ -214,7 +212,7 @@ index c8c4ba9..057fdbe 100644
  
    const handleFileViewerStateChange = useCallback((
      generation: number,
-@@ -1201,6 +1216,14 @@ export function AppShell() {
+@@ -1216,6 +1231,14 @@ export function AppShell() {
      if (isMobile) setSidebarOpen(false);
    }, [terminalTabs, isMobile]);
  
@@ -229,7 +227,7 @@ index c8c4ba9..057fdbe 100644
    // Subagent work opens in a right-panel tab instead of hijacking the main chat.
    const handleOpenSubagentTab = useCallback((sessionId: string, label: string) => {
      setAgentTabs((prev) => prev.some((tab) => tab.sessionId === sessionId) ? prev : [...prev, { sessionId, label }]);
-@@ -1213,8 +1236,8 @@ export function AppShell() {
+@@ -1245,8 +1268,8 @@ export function AppShell() {
      const replacement = tab.closing === "restart" ? newTerminalTab(tab.cwd) : null;
      const remaining = terminalTabs.filter((item) => item.id !== tab.id);
      setTerminalTabs((tabs) => tabs.flatMap((item) => item.id !== tab.id ? [item] : replacement ? [replacement] : []));
@@ -240,7 +238,7 @@ index c8c4ba9..057fdbe 100644
    };
  
    const handleCloseFileTab = useCallback((tabId: string) => {
-@@ -1222,27 +1245,37 @@ export function AppShell() {
+@@ -1254,27 +1277,37 @@ export function AppShell() {
        setTerminalTabs((tabs) => tabs.map((tab) => tab.id === tabId && !tab.closing ? { ...tab, closing: "close" } : tab));
        return;
      }
@@ -283,7 +281,7 @@ index c8c4ba9..057fdbe 100644
  
    const handleViewFullHistory = useCallback(() => {
      if (!selectedSession) return;
-@@ -1414,6 +1447,7 @@ export function AppShell() {
+@@ -1446,6 +1479,7 @@ export function AppShell() {
          onCwdChange={handleCwdChange}
          onOpenFile={handleOpenFile}
          onOpenTerminal={handleOpenTerminal}
@@ -291,7 +289,7 @@ index c8c4ba9..057fdbe 100644
          explorerRefreshKey={explorerRefreshKey}
          onExplorerRefresh={handleExplorerRefresh}
          onAtMention={handleAtMention}
-@@ -2728,7 +2762,7 @@ export function AppShell() {
+@@ -2762,7 +2796,7 @@ export function AppShell() {
                  { sourceSessionId: activeFileTab.sourceSessionId, page },
                )}
              />
@@ -300,7 +298,7 @@ index c8c4ba9..057fdbe 100644
              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
                 {translate("files.noneOpen")}
              </div>
-@@ -2744,6 +2778,11 @@ export function AppShell() {
+@@ -2778,6 +2812,11 @@ export function AppShell() {
                />
              </div>
            ))}
@@ -313,10 +311,10 @@ index c8c4ba9..057fdbe 100644
              <SubagentViewer
                key={activeAgentTab.sessionId}
 diff --git a/components/SessionSidebar.tsx b/components/SessionSidebar.tsx
-index 597bf77..2d64932 100644
+index df09a76..e09dc01 100644
 --- a/components/SessionSidebar.tsx
 +++ b/components/SessionSidebar.tsx
-@@ -215,6 +215,7 @@ interface Props {
+@@ -221,6 +221,7 @@ interface Props {
    ) => void;
    onOpenFile?: (filePath: string, fileName: string, options?: { sourceSessionId?: string | null; modeHint?: "diff" }) => void;
    onOpenTerminal?: (cwd: string) => void;
@@ -324,7 +322,7 @@ index 597bf77..2d64932 100644
    explorerRefreshKey?: number;
    onExplorerRefresh?: () => void;
    onAtMention?: (relativePath: string, isDir: boolean) => void;
-@@ -476,7 +477,7 @@ function buttonAnchor(element: HTMLElement, align: "start" | "end"): SidebarMenu
+@@ -500,7 +501,7 @@ function buttonAnchor(element: HTMLElement, align: "start" | "end"): SidebarMenu
    return { kind: "rect", rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, align };
  }
  
@@ -333,7 +331,7 @@ index 597bf77..2d64932 100644
    const { t } = useI18n();
    const isMobile = useIsMobile();
    const [allSessions, setAllSessions] = useState<SessionInfo[]>([]);
-@@ -2435,6 +2436,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
+@@ -2690,6 +2691,14 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
        <TerminalIcon size={keyIconSize} />
      </ToolbarIconButton>
    );
@@ -348,7 +346,7 @@ index 597bf77..2d64932 100644
    const fileManagerButton = (
      <ToolbarIconButton
        onClick={() => {
-@@ -2760,6 +2769,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
+@@ -3033,6 +3042,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
              </button>
              <div className="sidebar-files-keys" role="group" aria-label={t("sidebar.fileActions")}>
                {terminalButton}
@@ -356,7 +354,7 @@ index 597bf77..2d64932 100644
                {fileManagerButton}
                {uploadButton}
                {refreshButton}
-@@ -2831,6 +2841,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
+@@ -3104,6 +3114,7 @@ export function SessionSidebar({ selectedSessionId, onSelectSession, onNewSessio
              {!stacked && explorerCwd && (
                <div className="sidebar-files-actions" role="group" aria-label={t("sidebar.fileActions")}>
                  {onOpenTerminal && terminalButton}
@@ -365,7 +363,7 @@ index 597bf77..2d64932 100644
                  {uploadButton}
                  {refreshButton}
 diff --git a/components/TabBar.tsx b/components/TabBar.tsx
-index 23e0c79..4ffbc99 100644
+index 1ca2359..c5712a8 100644
 --- a/components/TabBar.tsx
 +++ b/components/TabBar.tsx
 @@ -9,7 +9,7 @@ export interface Tab {
@@ -377,7 +375,7 @@ index 23e0c79..4ffbc99 100644
    closing?: boolean;
    sourceSessionId?: string | null;
    initialDisplayMode?: FileViewerDisplayMode;
-@@ -48,7 +48,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+@@ -80,7 +80,7 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
            <div
              key={tab.id}
              role="tab"
@@ -386,7 +384,7 @@ index 23e0c79..4ffbc99 100644
              aria-selected={isActive}
              tabIndex={isActive || (!activeTabId && tabs[0].id === tab.id) ? 0 : -1}
              onKeyDown={(event) => {
-@@ -100,6 +100,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+@@ -131,6 +131,10 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                    <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
                  </svg>
@@ -397,7 +395,7 @@ index 23e0c79..4ffbc99 100644
                ) : tab.kind === "agent" ? (
                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                    <rect x="5" y="7" width="14" height="11" rx="2" /><path d="M9 11h.01M15 11h.01M9 15h6M12 7V4M10 4h4" />
-@@ -134,8 +138,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
+@@ -165,8 +169,8 @@ export function TabBar({ tabs, activeTabId, onSelectTab, onCloseTab }: Props) {
                  flexShrink: 0,
                  transition: "background 0.1s, color 0.1s",
                }}
@@ -576,10 +574,10 @@ index 0000000..d38cc13
 +  }
 +}
 diff --git a/lib/i18n/messages/en.ts b/lib/i18n/messages/en.ts
-index d7a375e..c5d4ab3 100644
+index 60b367e..b658aac 100644
 --- a/lib/i18n/messages/en.ts
 +++ b/lib/i18n/messages/en.ts
-@@ -559,6 +559,14 @@ export const enLocale: LocalePlugin = {
+@@ -602,6 +602,14 @@ export const enLocale: LocalePlugin = {
      "terminal.exited": "Terminal closed",
      "terminal.error": "Connection error",
      "terminal.exitCode": "Process exited with code {code}",
@@ -595,10 +593,10 @@ index d7a375e..c5d4ab3 100644
      "chat.outputModel": "output sent to model",
      "chat.configuredTools": "From settings.json defaultTools",
 diff --git a/lib/i18n/messages/zh-CN.ts b/lib/i18n/messages/zh-CN.ts
-index 2291067..77c69fc 100644
+index 7cfd419..9878f9d 100644
 --- a/lib/i18n/messages/zh-CN.ts
 +++ b/lib/i18n/messages/zh-CN.ts
-@@ -559,6 +559,14 @@ export const zhCNLocale: LocalePlugin = {
+@@ -602,6 +602,14 @@ export const zhCNLocale: LocalePlugin = {
      "terminal.exited": "终端已关闭",
      "terminal.error": "连接错误",
      "terminal.exitCode": "进程已退出，退出码 {code}",
@@ -614,10 +612,10 @@ index 2291067..77c69fc 100644
      "chat.outputModel": "输出发送给模型",
      "chat.configuredTools": "取自 settings.json 的 defaultTools",
 diff --git a/lib/i18n/messages/zh-TW.ts b/lib/i18n/messages/zh-TW.ts
-index fd0370c..537ffa3 100644
+index 30cf8f3..33ef07b 100644
 --- a/lib/i18n/messages/zh-TW.ts
 +++ b/lib/i18n/messages/zh-TW.ts
-@@ -559,6 +559,14 @@ export const zhTWLocale: LocalePlugin = {
+@@ -602,6 +602,14 @@ export const zhTWLocale: LocalePlugin = {
      "terminal.exited": "終端機已關閉",
      "terminal.error": "連線錯誤",
      "terminal.exitCode": "程序已結束，結束代碼 {code}",

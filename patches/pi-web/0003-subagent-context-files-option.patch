@@ -87,10 +87,10 @@ index 861a1c6..cdf3dca 100644
                    </div>
                  </ConfigDetailStack>
 diff --git a/lib/i18n/messages/en.ts b/lib/i18n/messages/en.ts
-index 03477fa..d7a375e 100644
+index cd3d53e..60b367e 100644
 --- a/lib/i18n/messages/en.ts
 +++ b/lib/i18n/messages/en.ts
-@@ -144,6 +144,7 @@ export const enLocale: LocalePlugin = {
+@@ -153,6 +153,7 @@ export const enLocale: LocalePlugin = {
      "agents.disable": "Disable sub-agent",
      "agents.builtinPath": "Built-in profile",
      "agents.inheritContext": "Inherit parent context",
@@ -99,10 +99,10 @@ index 03477fa..d7a375e 100644
      "agents.duplicate": "Duplicate",
      "agents.copyName": "{name} copy",
 diff --git a/lib/i18n/messages/zh-CN.ts b/lib/i18n/messages/zh-CN.ts
-index 1e5ce66..2291067 100644
+index bb1c648..7cfd419 100644
 --- a/lib/i18n/messages/zh-CN.ts
 +++ b/lib/i18n/messages/zh-CN.ts
-@@ -144,6 +144,7 @@ export const zhCNLocale: LocalePlugin = {
+@@ -153,6 +153,7 @@ export const zhCNLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "内置配置",
      "agents.inheritContext": "继承父会话上下文",
@@ -111,10 +111,10 @@ index 1e5ce66..2291067 100644
      "agents.duplicate": "创建副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/i18n/messages/zh-TW.ts b/lib/i18n/messages/zh-TW.ts
-index 1d4065f..fd0370c 100644
+index fe29c7f..30cf8f3 100644
 --- a/lib/i18n/messages/zh-TW.ts
 +++ b/lib/i18n/messages/zh-TW.ts
-@@ -144,6 +144,7 @@ export const zhTWLocale: LocalePlugin = {
+@@ -153,6 +153,7 @@ export const zhTWLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "內建設定檔",
      "agents.inheritContext": "繼承父工作階段上下文",
@@ -123,10 +123,10 @@ index 1d4065f..fd0370c 100644
      "agents.duplicate": "建立副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index 33356ab..1d371f9 100644
+index af1692d..cff1108 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
-@@ -2535,7 +2535,7 @@ export async function startRpcSession(
+@@ -2593,7 +2593,7 @@ export async function startRpcSession(
              ...(subagentExtensionFactories.length > 0 ? { extensionFactories: subagentExtensionFactories } : {}),
              noPromptTemplates: true,
              noThemes: true,
@@ -136,7 +136,7 @@ index 33356ab..1d371f9 100644
                ? {
                    systemPrompt: " ",
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 0df625c..af408a5 100644
+index 94e62f8..9b07123 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
 @@ -41,6 +41,7 @@ test("integrated extension exposes the legacy-compatible tool names", async () =
@@ -155,7 +155,7 @@ index 0df625c..af408a5 100644
        description: "Find parser",
        run_in_background: true,
      },
-@@ -400,6 +402,24 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
+@@ -473,6 +475,24 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
    assert.equal(result.content[0].text, "Subagent existing completed.\n\ncontinued");
  });
  
@@ -181,10 +181,10 @@ index 0df625c..af408a5 100644
    let finish;
    const notifications = [];
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index 99aec8a..6d32aee 100644
+index e2416de..df5eb5a 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -51,6 +51,7 @@ export interface StartSubagentRequest {
+@@ -52,6 +52,7 @@ export interface StartSubagentRequest {
    description: string;
    runInBackground?: boolean;
    model?: string;
@@ -192,7 +192,7 @@ index 99aec8a..6d32aee 100644
    isolation?: "worktree";
    signal?: AbortSignal;
    onUpdate?: (run: SubagentRunInfo) => void;
-@@ -183,6 +184,7 @@ export function createSubagentExtension(
+@@ -204,6 +205,7 @@ export function createSubagentExtension(
            description: Type.String({ description: "Short activity label shown in the UI." }),
            run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
            model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
@@ -200,7 +200,7 @@ index 99aec8a..6d32aee 100644
            isolation: Type.Optional(Type.String({ description: 'Set to "worktree" to run the subagent in an isolated git worktree.' })),
          }),
          async execute(toolCallId, params, signal, onUpdate, ctx) {
-@@ -192,6 +194,7 @@ export function createSubagentExtension(
+@@ -213,6 +215,7 @@ export function createSubagentExtension(
                const creationOptions = [
                  params.model?.trim() && "model",
                  params.input_files?.length && "input_files",
@@ -208,7 +208,7 @@ index 99aec8a..6d32aee 100644
                  params.isolation?.trim() && "isolation",
                ].filter(Boolean);
                if (creationOptions.length > 0) {
-@@ -221,6 +224,7 @@ export function createSubagentExtension(
+@@ -242,6 +245,7 @@ export function createSubagentExtension(
                description: params.description,
                ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
                ...(params.model ? { model: params.model } : {}),
@@ -217,18 +217,19 @@ index 99aec8a..6d32aee 100644
                signal,
                onUpdate: (run) => onUpdate?.({
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 186988a..4b7cb2b 100644
+index 42df041..399cb9e 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
-@@ -1,4 +1,5 @@
+@@ -1,5 +1,5 @@
  import assert from "node:assert/strict";
-+import { readFile } from "node:fs/promises";
+-import { mkdtemp, rm, writeFile } from "node:fs/promises";
++import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
  import test from "node:test";
- import { createJiti } from "jiti";
- 
-@@ -6,6 +7,20 @@ const jiti = createJiti(import.meta.url);
- const { createSubagentController } = await jiti.import("./subagent-runtime.ts");
- const { SUBAGENT_NOTIFICATION_PREFIX } = await jiti.import("./subagent-extension.ts");
+@@ -9,6 +9,20 @@ const jiti = createJiti(import.meta.url);
+ const { createSubagentController, hasUnsettledSubagentRun } = await jiti.import("./subagent-runtime.ts");
+ const { SUBAGENT_NOTIFICATION_PREFIX, subagentFinalText } = await jiti.import("./subagent-extension.ts");
  
 +test("context file loading defaults off and a per-call value overrides the profile", async () => {
 +  const source = await readFile(new URL("./subagent-runtime.ts", import.meta.url), "utf8");
@@ -248,10 +249,10 @@ index 186988a..4b7cb2b 100644
    return {
      sessionId: "child-session",
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index d313e75..197883b 100644
+index f3886c8..1d5e82a 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -327,6 +327,7 @@ export function createSubagentController(
+@@ -421,6 +421,7 @@ export function createSubagentController(
          ...(skillsBinding.loaderOptions.extensionFactories ?? []),
        ];
        if (!chatOnly) initTheme();
@@ -259,7 +260,7 @@ index d313e75..197883b 100644
        const services = await createAgentSessionServices({
          cwd: childCwd,
          agentDir,
-@@ -338,7 +339,7 @@ export function createSubagentController(
+@@ -432,7 +433,7 @@ export function createSubagentController(
            ...(extensionFactories.length > 0 ? { extensionFactories } : {}),
            noPromptTemplates: true,
            noThemes: true,
@@ -268,7 +269,7 @@ index d313e75..197883b 100644
            ...(chatOnly || promptPlan.exactSystemPrompt !== undefined
              ? {
                  systemPrompt: " ",
-@@ -395,6 +396,7 @@ export function createSubagentController(
+@@ -489,6 +490,7 @@ export function createSubagentController(
            tools: [...activeTools],
            ...(codemodeEnabled ? { codemode: true as const } : {}),
            ...(mcpEnabled ? { mcp: true as const } : {}),
@@ -326,7 +327,7 @@ index cffa088..ed62b12 100644
      assert.equal(loaded.loadExtensions, true);
    } finally {
 diff --git a/lib/subagents.ts b/lib/subagents.ts
-index a4c8e1f..0bfb8cf 100644
+index dc12c69..0b06148 100644
 --- a/lib/subagents.ts
 +++ b/lib/subagents.ts
 @@ -45,6 +45,7 @@ export interface SubagentProfile {
@@ -353,7 +354,7 @@ index a4c8e1f..0bfb8cf 100644
    allExtensionTools?: true;
    exactSystemPrompt?: string;
  }
-@@ -158,6 +161,7 @@ const MANAGED_FRONTMATTER_KEYS = new Set([
+@@ -162,6 +165,7 @@ const MANAGED_FRONTMATTER_KEYS = new Set([
    "mcp",
    "enabled",
    "inherit_context",
@@ -361,7 +362,7 @@ index a4c8e1f..0bfb8cf 100644
    "run_in_background",
    "model",
    "thinking",
-@@ -203,6 +207,7 @@ function validateSavedMcp(value: unknown): SubagentMcp | undefined {
+@@ -207,6 +211,7 @@ function validateSavedMcp(value: unknown): SubagentMcp | undefined {
  const BUILTIN_PROFILES: SubagentProfile[] = [
    {
      name: "general-purpose",
@@ -369,7 +370,7 @@ index a4c8e1f..0bfb8cf 100644
      displayName: "General purpose",
      description: "Handle a focused implementation or investigation task",
      systemPrompt: "Work autonomously on the delegated task. Keep the final answer concise and include important files, decisions, and remaining risks.",
-@@ -219,6 +224,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
+@@ -223,6 +228,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
    },
    {
      name: "explore",
@@ -377,7 +378,7 @@ index a4c8e1f..0bfb8cf 100644
      displayName: "Explore",
      description: "Quickly inspect a codebase without modifying it",
      systemPrompt: "Explore the codebase to answer the delegated question. Do not modify files. Report concrete findings with file paths and relevant symbols.",
-@@ -235,6 +241,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
+@@ -239,6 +245,7 @@ const BUILTIN_PROFILES: SubagentProfile[] = [
    },
    {
      name: "plan",
@@ -385,7 +386,7 @@ index a4c8e1f..0bfb8cf 100644
      displayName: "Plan",
      description: "Design an implementation plan without modifying files",
      systemPrompt: "Produce an implementation-ready plan for the delegated task. Inspect the repository as needed, do not modify files, and call out dependencies, risks, and verification steps.",
-@@ -420,6 +427,7 @@ function parseProfileFile(filePath: string, scope: SubagentScope): SubagentProfi
+@@ -424,6 +431,7 @@ function parseProfileFile(filePath: string, scope: SubagentScope): SubagentProfi
        ...(thinkingValue && THINKING_LEVELS.has(thinkingValue) ? { thinking: thinkingValue } : {}),
        ...(maxTurnsValue && maxTurnsValue > 0 ? { maxTurns: maxTurnsValue } : {}),
        inheritContext: booleanValue(data?.inherit_context, false),
@@ -393,7 +394,7 @@ index a4c8e1f..0bfb8cf 100644
        runInBackground: booleanValue(data?.run_in_background, false),
        promptMode: data?.prompt_mode === "replace" ? "replace" : "append",
        ...(stringValue(data?.color) ? { color: stringValue(data?.color) } : {}),
-@@ -567,6 +575,7 @@ export function saveSubagentProfile(
+@@ -571,6 +579,7 @@ export function saveSubagentProfile(
      ...(mcp === "on" || stored.mcp !== undefined ? { mcp } : {}),
      enabled: profile.enabled,
      inherit_context: profile.inheritContext,
@@ -401,7 +402,7 @@ index a4c8e1f..0bfb8cf 100644
      run_in_background: profile.runInBackground,
      prompt_mode: promptMode,
    };
-@@ -675,6 +684,7 @@ export function readSubagentSessionResources(
+@@ -679,6 +688,7 @@ export function readSubagentSessionResources(
    const loadExtensions = isRecord(snapshot) && snapshot.loadExtensions === true;
    const codemode = isRecord(snapshot) && snapshot.codemode === true;
    const mcp = isRecord(snapshot) && snapshot.mcp === true;
@@ -409,7 +410,7 @@ index a4c8e1f..0bfb8cf 100644
    if (
      isRecord(snapshot)
      && snapshot.version === 1
-@@ -699,6 +709,7 @@ export function readSubagentSessionResources(
+@@ -703,6 +713,7 @@ export function readSubagentSessionResources(
        loadExtensions,
        ...(codemode ? { codemode: true as const } : {}),
        ...(mcp ? { mcp: true as const } : {}),

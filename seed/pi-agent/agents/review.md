@@ -6,6 +6,8 @@ load_skills: true
 load_extensions: true
 enabled: true
 inherit_context: false
+codemode: inherit
+mcp: on
 run_in_background: false
 prompt_mode: append
 skills: true
