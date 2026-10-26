@@ -1,20 +1,20 @@
 {
   "defaultProvider": "opencode-free",
   "defaultModel": "big-pickle",
-  "retry": {
-    "maxRetries": 2000
-  },
+  "cacheWarming": "idle",
+  "showCacheMissNotices": true,
   "packages": [
-    "npm:@narumitw/pi-goal",
+    "git:github.com/canoziia/pi-goal",
+    "git:github.com/clankercode/pi-reload-self",
     {
-      "source": "npm:@narumitw/pi-plan-mode",
+      "source": "git:github.com/canoziia/pi-retry",
       "extensions": [],
       "skills": [],
       "prompts": [],
       "themes": []
     },
     {
-      "source": "git:github.com/canoziia/pi-retry",
+      "source": "npm:@narumitw/pi-plan-mode",
       "extensions": [],
       "skills": [],
       "prompts": [],
