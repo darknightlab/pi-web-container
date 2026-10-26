@@ -1,0 +1,126 @@
+diff --git a/lib/builtin-extensions.ts b/lib/builtin-extensions.ts
+index 018890c..1639303 100644
+--- a/lib/builtin-extensions.ts
++++ b/lib/builtin-extensions.ts
+@@ -371,20 +371,24 @@ function createMcpBuiltins(
+     builtin("mcp", gate(
+       "mcp",
+       mcp.available && mcpHost
+-        ? createMcpExtension({
+-            loadConfig: createMcpExtensionConfigLoader(mcp.internals, options.agentDir),
+-            createTransport: mcpHost.wrapTransportFactory(createPiWebMcpTransportFactory(mcp.internals)),
+-            // The host already waited, and Stop ends its wait. The extension's own wait for
+-            // servers with `direct` tools, at a session's first prompt, ignores Stop.
+-            startupWaitMs: 0,
+-            // `/mcp login` already shows the address in the chat; a browser
+-            // opened on the server host is one a remote user never sees.
+-            openUrl: () => {},
+-          })
++        ? (pi) => {
++            // Built-ins load before ordinary inline extensions regardless of array order.
++            // Register the host's awaited preflight before MCP's prompt-section handler.
++            mcpHost.extension().factory(pi);
++            return createMcpExtension({
++              loadConfig: createMcpExtensionConfigLoader(mcp.internals, options.agentDir),
++              createTransport: mcpHost.wrapTransportFactory(createPiWebMcpTransportFactory(mcp.internals)),
++              // The host already waited, and Stop ends its wait. The extension's own wait for
++              // servers with `direct` tools, at a session's first prompt, ignores Stop.
++              startupWaitMs: 0,
++              // `/mcp login` already shows the address in the chat; a browser
++              // opened on the server host is one a remote user never sees.
++              openUrl: () => {},
++            })(pi);
++          }
+         : unavailableExtension,
+     )),
+   ];
+-  if (mcpHost) extensions.push(mcpHost.extension());
+   return { extensions, mcpHost };
+ }
+ 
+diff --git a/lib/mcp-host.integration.test.mjs b/lib/mcp-host.integration.test.mjs
+index 2968ad5..919c724 100644
+--- a/lib/mcp-host.integration.test.mjs
++++ b/lib/mcp-host.integration.test.mjs
+@@ -6,7 +6,7 @@ import { join } from "node:path";
+ import test from "node:test";
+ import { setTimeout as delay } from "node:timers/promises";
+ import { fileURLToPath } from "node:url";
+-import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai";
++import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
+ import {
+   createAgentSession,
+   DefaultResourceLoader,
+@@ -112,6 +112,44 @@ async function promptAndSeeTools(wrapper, faux) {
+   return offered;
+ }
+ 
++test("a custom-message wake after MCP release keeps the server section across turns", async (t) => {
++  await writeMcpConfig({ fixture: { ...fixtureServer(), exposure: "codemode", description: "Fixture server" } });
++  t.after(() => rm(join(agentDir, "mcp.json"), { force: true }));
++  const { session, wrapper, faux, mcpHost } = await startSession(t, { idleMs: 0 });
++  await promptAndSeeTools(wrapper, faux);
++  const currentSection = () => {
++    let section;
++    for (const message of session.messages) {
++      if (message.role === "system" && Object.hasOwn(message.sections ?? {}, "mcp_servers")) {
++        section = message.sections.mcp_servers;
++      }
++    }
++    return section;
++  };
++  const expected = currentSection();
++  assert.match(expected, /mcp__fixture/);
++  await mcpHost.release();
++  assert.deepEqual(mcpHost.serverStates(), []);
++  const before = session.messages.length;
++  const observed = [];
++  faux.setResponses([
++    () => {
++      observed.push(currentSection());
++      return fauxAssistantMessage([fauxToolCall("ls", { path: "." })], { stopReason: "toolUse" });
++    },
++    () => {
++      observed.push(currentSection());
++      return fauxAssistantMessage([fauxText("done")]);
++    },
++  ]);
++  await session.sendCustomMessage({ customType: "pi-web:subagent-notification", content: "Child completed", display: true },
++    { deliverAs: "followUp", triggerTurn: true });
++  assert.deepEqual(observed, [expected, expected], "both wake requests must retain the registered server section");
++  assert.ok(!session.messages.slice(before).some((message) => message.role === "system"
++    && Object.hasOwn(message.sections ?? {}, "mcp_servers")), "an unchanged section must not generate any patch");
++  assert.ok(mcpHost.serverStates().some((server) => server.name === "fixture"));
++});
++
+ test("a prompt connects the configured servers before the model sees its request", async (t) => {
+   await writeMcpConfig({ fixture: fixtureServer() });
+   t.after(() => rm(join(agentDir, "mcp.json"), { force: true }));
+diff --git a/lib/mcp-host.ts b/lib/mcp-host.ts
+index 8d01875..25193e5 100644
+--- a/lib/mcp-host.ts
++++ b/lib/mcp-host.ts
+@@ -554,10 +554,11 @@ class HostInstance {
+       // loading the extensions.
+       this.reportActivity(ctx, this.active ? undefined : commands[0]?.sourceInfo?.path);
+     });
+-    pi.on("before_agent_start", () => {
++    pi.on("before_agent_start", async () => {
+       this.clearIdle();
+-      // Prompts that do not come through the wrapper, such as an extension's, still connect.
+-      void this.sync();
++      // Run before the MCP extension renders its prompt section, including extension-triggered wakes.
++      // Wait for registration only; indirect tools still connect in the background.
++      await this.sync();
+     });
+     pi.on("agent_start", () => {
+       this.runActive = true;
+@@ -1043,7 +1044,7 @@ export class McpHost {
+     };
+   }
+ 
+-  extension(): InlineExtension {
++  extension(): Extract<InlineExtension, { factory: unknown }> {
+     return {
+       name: MCP_HOST_EXTENSION_NAME,
+       hidden: true,
