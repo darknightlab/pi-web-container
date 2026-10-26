@@ -40,14 +40,27 @@ RUN mkdir -p /tmp/pi-web-package \
  && rm -rf /tmp/pi-web-src /tmp/pi-web-package /root/.npm
 
 COPY npm/runtime/package.json npm/runtime/package-lock.json /usr/local/lib/pi-web-container/runtime/
+COPY patches/pi-coding-agent/ /tmp/pi-coding-agent-patches/
 WORKDIR /usr/local/lib/pi-web-container/runtime
 # Paseo is installed from the lock. The Pi CLI is not pinned here: it is
 # installed at the exact version of the SDK pi-web was built with, so the
 # terminal `pi`, Paseo's Pi provider, and Pi Web's session engine never skew.
+# patches/pi-coding-agent/ is applied to both installed SDK copies (Pi Web's and
+# the CLI's); the patches target one SDK version's dist/ and fail the build on drift.
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
  && PI_VERSION=$(node -e "const {findPackageJSON}=require('node:module');const fs=require('fs');process.stdout.write(JSON.parse(fs.readFileSync(findPackageJSON('@earendil-works/pi-coding-agent','/usr/local/lib/node_modules/@agegr/pi-web/package.json'),'utf8')).version)") \
  && echo "Installing the Pi CLI at pi-web's SDK version: ${PI_VERSION}" \
  && npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-save --no-package-lock "@earendil-works/pi-coding-agent@${PI_VERSION}" \
+ && PI_WEB_SDK_DIR=$(node -e "const {findPackageJSON}=require('node:module');const path=require('path');process.stdout.write(path.dirname(findPackageJSON('@earendil-works/pi-coding-agent','/usr/local/lib/node_modules/@agegr/pi-web/package.json')))") \
+ && PI_CLI_SDK_DIR=/usr/local/lib/pi-web-container/runtime/node_modules/@earendil-works/pi-coding-agent \
+ && for dir in $(realpath "$PI_WEB_SDK_DIR" "$PI_CLI_SDK_DIR" | sort -u); do \
+      for patch in $(ls -1 /tmp/pi-coding-agent-patches/*.patch 2>/dev/null); do \
+        echo "applying patch: $patch -> $dir"; \
+        patch -p1 --forward --batch --no-backup-if-mismatch -r - -d "$dir" < "$patch" \
+          || { echo "ERROR: patch failed to apply (rebase or remove it): $patch" >&2; exit 1; }; \
+      done; \
+    done \
+ && rm -rf /tmp/pi-coding-agent-patches \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/pi /usr/local/bin/pi \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/paseo /usr/local/bin/paseo \
  && pi --version \
