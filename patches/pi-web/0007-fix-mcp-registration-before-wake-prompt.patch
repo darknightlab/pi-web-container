@@ -39,7 +39,7 @@ index 018890c..1639303 100644
  }
  
 diff --git a/lib/mcp-host.integration.test.mjs b/lib/mcp-host.integration.test.mjs
-index 2968ad5..919c724 100644
+index 4c49b22..8d6161b 100644
 --- a/lib/mcp-host.integration.test.mjs
 +++ b/lib/mcp-host.integration.test.mjs
 @@ -6,7 +6,7 @@ import { join } from "node:path";
@@ -97,10 +97,10 @@ index 2968ad5..919c724 100644
    await writeMcpConfig({ fixture: fixtureServer() });
    t.after(() => rm(join(agentDir, "mcp.json"), { force: true }));
 diff --git a/lib/mcp-host.ts b/lib/mcp-host.ts
-index 8d01875..25193e5 100644
+index e671e80..45e2b26 100644
 --- a/lib/mcp-host.ts
 +++ b/lib/mcp-host.ts
-@@ -554,10 +554,11 @@ class HostInstance {
+@@ -557,10 +557,11 @@ class HostInstance {
        // loading the extensions.
        this.reportActivity(ctx, this.active ? undefined : commands[0]?.sourceInfo?.path);
      });
@@ -115,7 +115,7 @@ index 8d01875..25193e5 100644
      });
      pi.on("agent_start", () => {
        this.runActive = true;
-@@ -1043,7 +1044,7 @@ export class McpHost {
+@@ -1072,7 +1073,7 @@ export class McpHost {
      };
    }
  

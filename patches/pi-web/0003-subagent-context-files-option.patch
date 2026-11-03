@@ -87,10 +87,10 @@ index 861a1c6..cdf3dca 100644
                    </div>
                  </ConfigDetailStack>
 diff --git a/lib/i18n/messages/en.ts b/lib/i18n/messages/en.ts
-index cd3d53e..60b367e 100644
+index d5d4f71..2b897dd 100644
 --- a/lib/i18n/messages/en.ts
 +++ b/lib/i18n/messages/en.ts
-@@ -153,6 +153,7 @@ export const enLocale: LocalePlugin = {
+@@ -154,6 +154,7 @@ export const enLocale: LocalePlugin = {
      "agents.disable": "Disable sub-agent",
      "agents.builtinPath": "Built-in profile",
      "agents.inheritContext": "Inherit parent context",
@@ -99,10 +99,10 @@ index cd3d53e..60b367e 100644
      "agents.duplicate": "Duplicate",
      "agents.copyName": "{name} copy",
 diff --git a/lib/i18n/messages/zh-CN.ts b/lib/i18n/messages/zh-CN.ts
-index bb1c648..7cfd419 100644
+index e9dfee6..d06e115 100644
 --- a/lib/i18n/messages/zh-CN.ts
 +++ b/lib/i18n/messages/zh-CN.ts
-@@ -153,6 +153,7 @@ export const zhCNLocale: LocalePlugin = {
+@@ -154,6 +154,7 @@ export const zhCNLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "内置配置",
      "agents.inheritContext": "继承父会话上下文",
@@ -111,10 +111,10 @@ index bb1c648..7cfd419 100644
      "agents.duplicate": "创建副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/i18n/messages/zh-TW.ts b/lib/i18n/messages/zh-TW.ts
-index fe29c7f..30cf8f3 100644
+index 49d43c5..d2976da 100644
 --- a/lib/i18n/messages/zh-TW.ts
 +++ b/lib/i18n/messages/zh-TW.ts
-@@ -153,6 +153,7 @@ export const zhTWLocale: LocalePlugin = {
+@@ -154,6 +154,7 @@ export const zhTWLocale: LocalePlugin = {
      "agents.disable": "停用子代理",
      "agents.builtinPath": "內建設定檔",
      "agents.inheritContext": "繼承父工作階段上下文",
@@ -123,10 +123,10 @@ index fe29c7f..30cf8f3 100644
      "agents.duplicate": "建立副本",
      "agents.copyName": "{name} 副本",
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index af1692d..cff1108 100644
+index 12a1ce5..b161053 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
-@@ -2593,7 +2593,7 @@ export async function startRpcSession(
+@@ -3218,7 +3218,7 @@ export async function startRpcSession(
              ...(subagentExtensionFactories.length > 0 ? { extensionFactories: subagentExtensionFactories } : {}),
              noPromptTemplates: true,
              noThemes: true,
@@ -136,7 +136,7 @@ index af1692d..cff1108 100644
                ? {
                    systemPrompt: " ",
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 94e62f8..9b07123 100644
+index 88a52f9..ef0cb95 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
 @@ -41,6 +41,7 @@ test("integrated extension exposes the legacy-compatible tool names", async () =
@@ -155,7 +155,7 @@ index 94e62f8..9b07123 100644
        description: "Find parser",
        run_in_background: true,
      },
-@@ -473,6 +475,24 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
+@@ -476,6 +478,24 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
    assert.equal(result.content[0].text, "Subagent existing completed.\n\ncontinued");
  });
  
@@ -181,10 +181,10 @@ index 94e62f8..9b07123 100644
    let finish;
    const notifications = [];
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index e2416de..df5eb5a 100644
+index 20fa8f9..1c8ed81 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -52,6 +52,7 @@ export interface StartSubagentRequest {
+@@ -140,6 +140,7 @@ export interface StartSubagentRequest {
    description: string;
    runInBackground?: boolean;
    model?: string;
@@ -192,15 +192,15 @@ index e2416de..df5eb5a 100644
    isolation?: "worktree";
    signal?: AbortSignal;
    onUpdate?: (run: SubagentRunInfo) => void;
-@@ -204,6 +205,7 @@ export function createSubagentExtension(
-           description: Type.String({ description: "Short activity label shown in the UI." }),
+@@ -293,6 +294,7 @@ export function createSubagentExtension(
            run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           wait_timeout: waitTimeoutParameter(),
            model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
 +          load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
            isolation: Type.Optional(Type.String({ description: 'Set to "worktree" to run the subagent in an isolated git worktree.' })),
          }),
          async execute(toolCallId, params, signal, onUpdate, ctx) {
-@@ -213,6 +215,7 @@ export function createSubagentExtension(
+@@ -328,6 +330,7 @@ export function createSubagentExtension(
                const creationOptions = [
                  params.model?.trim() && "model",
                  params.input_files?.length && "input_files",
@@ -208,16 +208,16 @@ index e2416de..df5eb5a 100644
                  params.isolation?.trim() && "isolation",
                ].filter(Boolean);
                if (creationOptions.length > 0) {
-@@ -242,6 +245,7 @@ export function createSubagentExtension(
+@@ -354,6 +357,7 @@ export function createSubagentExtension(
                description: params.description,
                ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
                ...(params.model ? { model: params.model } : {}),
 +              ...(params.load_context_files !== undefined ? { loadContextFiles: params.load_context_files } : {}),
                ...(params.isolation === "worktree" ? { isolation: "worktree" as const } : {}),
-               signal,
-               onUpdate: (run) => onUpdate?.({
+               signal: childAbort.signal,
+               onUpdate: update,
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 42df041..399cb9e 100644
+index a046ef6..f89d662 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
 @@ -1,5 +1,5 @@
@@ -228,7 +228,7 @@ index 42df041..399cb9e 100644
  import { join } from "node:path";
  import test from "node:test";
 @@ -9,6 +9,20 @@ const jiti = createJiti(import.meta.url);
- const { createSubagentController, hasUnsettledSubagentRun } = await jiti.import("./subagent-runtime.ts");
+ const { createSubagentController, getSessionIdsWithUnsettledSubagentRuns, hasUnsettledSubagentRun, subagentDebugSnapshot } = await jiti.import("./subagent-runtime.ts");
  const { SUBAGENT_NOTIFICATION_PREFIX, subagentFinalText } = await jiti.import("./subagent-extension.ts");
  
 +test("context file loading defaults off and a per-call value overrides the profile", async () => {
@@ -249,10 +249,10 @@ index 42df041..399cb9e 100644
    return {
      sessionId: "child-session",
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index f3886c8..1d5e82a 100644
+index beb5c4a..e4bd0ce 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -421,6 +421,7 @@ export function createSubagentController(
+@@ -510,6 +510,7 @@ export function createSubagentController(
          ...(skillsBinding.loaderOptions.extensionFactories ?? []),
        ];
        if (!chatOnly) initTheme();
@@ -260,7 +260,7 @@ index f3886c8..1d5e82a 100644
        const services = await createAgentSessionServices({
          cwd: childCwd,
          agentDir,
-@@ -432,7 +433,7 @@ export function createSubagentController(
+@@ -521,7 +522,7 @@ export function createSubagentController(
            ...(extensionFactories.length > 0 ? { extensionFactories } : {}),
            noPromptTemplates: true,
            noThemes: true,
@@ -269,7 +269,7 @@ index f3886c8..1d5e82a 100644
            ...(chatOnly || promptPlan.exactSystemPrompt !== undefined
              ? {
                  systemPrompt: " ",
-@@ -489,6 +490,7 @@ export function createSubagentController(
+@@ -578,6 +579,7 @@ export function createSubagentController(
            tools: [...activeTools],
            ...(codemodeEnabled ? { codemode: true as const } : {}),
            ...(mcpEnabled ? { mcp: true as const } : {}),
@@ -327,7 +327,7 @@ index cffa088..ed62b12 100644
      assert.equal(loaded.loadExtensions, true);
    } finally {
 diff --git a/lib/subagents.ts b/lib/subagents.ts
-index dc12c69..0b06148 100644
+index 0d60b47..3d5d7c6 100644
 --- a/lib/subagents.ts
 +++ b/lib/subagents.ts
 @@ -45,6 +45,7 @@ export interface SubagentProfile {

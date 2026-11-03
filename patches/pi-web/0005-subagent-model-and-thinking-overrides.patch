@@ -1,8 +1,8 @@
 diff --git a/lib/rpc-manager.ts b/lib/rpc-manager.ts
-index cff1108..9ad75a1 100644
+index b161053..ccadd91 100644
 --- a/lib/rpc-manager.ts
 +++ b/lib/rpc-manager.ts
-@@ -2161,8 +2161,8 @@ export function getSubagentRun(sessionId: string) {
+@@ -2580,8 +2580,8 @@ export function getSubagentRun(sessionId: string) {
    return SUBAGENT_CONTROLLER.get(sessionId);
  }
  
@@ -14,7 +14,7 @@ index cff1108..9ad75a1 100644
  
  export function abortSubagent(sessionId: string) {
 diff --git a/lib/subagent-extension.integration.test.mjs b/lib/subagent-extension.integration.test.mjs
-index e4a7fd5..4b19ff2 100644
+index 18206f2..10bd2b1 100644
 --- a/lib/subagent-extension.integration.test.mjs
 +++ b/lib/subagent-extension.integration.test.mjs
 @@ -188,15 +188,17 @@ test("subagent control tools are declared to the model but cannot be called from
@@ -71,10 +71,10 @@ index e4a7fd5..4b19ff2 100644
      session?.dispose();
      await rm(dir, { recursive: true, force: true });
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index ed8a8c6..42ad5f4 100644
+index 674eef3..4076513 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
-@@ -503,6 +503,27 @@ test("Agent forwards per-call profile overrides to a new subagent and ignores th
+@@ -506,6 +506,27 @@ test("Agent forwards per-call profile overrides to a new subagent and ignores th
    assert.equal(resumed.inheritContext, undefined);
  });
  
@@ -102,7 +102,7 @@ index ed8a8c6..42ad5f4 100644
  test("Agent resume rejects options that only apply to a new subagent", async () => {
    const { tools } = await loadTools({
      async start() { throw new Error("must not start"); },
-@@ -610,15 +631,19 @@ test("steer_subagent returns success and runtime failures", async () => {
+@@ -664,15 +685,19 @@ test("steer_subagent returns success and runtime failures", async () => {
    const { tools } = await loadTools({
      async start() { throw new Error("unused"); },
      async get() { return null; },
@@ -127,10 +127,10 @@ index ed8a8c6..42ad5f4 100644
    const failure = await tool.execute("call", { agent_id: "child-session", message: "fail" });
    assert.equal(failure.isError, true);
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index 292ea76..43fd047 100644
+index b9aadc8..3804316 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -68,6 +68,10 @@ export interface ResumeSubagentRequest {
+@@ -156,6 +156,10 @@ export interface ResumeSubagentRequest {
    task: string;
    description: string;
    runInBackground?: boolean;
@@ -141,7 +141,7 @@ index 292ea76..43fd047 100644
    signal?: AbortSignal;
    onUpdate?: (run: SubagentRunInfo) => void;
  }
-@@ -81,7 +85,7 @@ export interface SubagentExtensionRuntime {
+@@ -169,7 +173,7 @@ export interface SubagentExtensionRuntime {
    start(request: StartSubagentRequest): Promise<SubagentExecution>;
    resume(request: ResumeSubagentRequest): Promise<SubagentExecution>;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
@@ -150,7 +150,7 @@ index 292ea76..43fd047 100644
    notifyParent(run: SubagentRunInfo): Promise<void>;
    markResultConsumed(run: Pick<SubagentRunInfo, "sessionId" | "completedAt">): void;
  }
-@@ -200,15 +204,15 @@ export function createSubagentExtension(
+@@ -288,7 +292,7 @@ export function createSubagentExtension(
          parameters: Type.Object({
            subagent_type: Type.Optional(Type.String({ description: `Configured agent profile. Available types: ${availableTypes}. Default: general-purpose.` })),
            prompt: Type.String({ description: "The complete task for the subagent." }),
@@ -159,9 +159,10 @@ index 292ea76..43fd047 100644
            input_files: Type.Optional(Type.Array(Type.String(), {
              description: `UTF-8 text files under the session cwd to include with the task. Together they may fill about a tenth of the subagent model's context window, at most ${MAX_SUBAGENT_INPUT_BYTES / 1024} KB. Pass fewer or smaller files, or name the paths in prompt if the subagent can read them.`,
              maxItems: MAX_SUBAGENT_INPUT_FILES,
-           })),
+@@ -296,8 +300,8 @@ export function createSubagentExtension(
            description: Type.String({ description: "Short activity label shown in the UI." }),
            run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           wait_timeout: waitTimeoutParameter(),
 -          model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
 -          thinking: Type.Optional(Type.String({ description: "Optional thinking level override for a new subagent (off, minimal, low, medium, high, xhigh, max). Beats a model's \":<level>\" suffix and the profile setting." })),
 +          model: Type.Optional(Type.String({ description: 'Optional provider/modelId override, also when resuming. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level, e.g. "provider/model:high".' })),
@@ -169,7 +170,7 @@ index 292ea76..43fd047 100644
            max_turns: Type.Optional(Type.Number({ description: "Optional positive turn limit for a new subagent. Overrides the profile setting." })),
            inherit_context: Type.Optional(Type.Boolean({ description: "Include the parent session's active conversation context in a new subagent. Overrides the profile setting." })),
            load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
-@@ -219,7 +223,6 @@ export function createSubagentExtension(
+@@ -334,7 +338,6 @@ export function createSubagentExtension(
              const resume = params.resume?.trim();
              if (resume) {
                const creationOptions = [
@@ -177,16 +178,16 @@ index 292ea76..43fd047 100644
                  params.input_files?.length && "input_files",
                  params.load_context_files !== undefined && "load_context_files",
                  params.isolation?.trim() && "isolation",
-@@ -236,6 +239,8 @@ export function createSubagentExtension(
+@@ -351,6 +354,8 @@ export function createSubagentExtension(
                    task: params.prompt,
                    description: params.description,
                    ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
 +                  ...(params.model?.trim() ? { model: params.model } : {}),
 +                  ...(params.thinking?.trim() ? { thinking: params.thinking } : {}),
-                   signal,
-                   onUpdate: (run) => onUpdate?.({
-                     content: [{ type: "text", text: `${run.profile}: ${run.description} (${run.status})` }],
-@@ -336,16 +341,23 @@ export function createSubagentExtension(
+                   signal: childAbort.signal,
+                   onUpdate: update,
+                 })
+@@ -452,16 +457,23 @@ export function createSubagentExtension(
        pi.registerTool(defineTool({
          name: "steer_subagent",
          label: "Steer agent",
@@ -214,10 +215,10 @@ index 292ea76..43fd047 100644
              return { content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }], details: undefined, isError: true };
            }
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 67ef047..8fa49a4 100644
+index 190215a..fe6056c 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
-@@ -492,6 +492,103 @@ test("a resumed run that fails right away still notifies after the parent inspec
+@@ -565,6 +565,103 @@ test("a resumed run that fails right away still notifies after the parent inspec
    assert.deepEqual(delivered[1].options, { deliverAs: "followUp", triggerTurn: true });
  });
  
@@ -322,19 +323,19 @@ index 67ef047..8fa49a4 100644
    const controller = createSubagentController({
      getSession: (id) => id === "parent" ? { inner: { sessionManager: { getSessionId: () => "parent" } }, sessionFile: "/tmp/parent.jsonl", cwd: "/tmp", isAlive: () => true, isRunning: () => false, waitUntilReady: async () => {} } : undefined,
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index 63befef..08eec8f 100644
+index f08e339..58a489e 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -75,7 +75,7 @@ export interface SubagentRuntimeDependencies {
+@@ -77,7 +77,7 @@ export interface SubagentRuntimeDependencies {
  export interface SubagentController {
    readonly extensionRuntime: SubagentExtensionRuntime;
    get(sessionId: string): Promise<SubagentRunInfo | null>;
 -  steer(sessionId: string, message: string): Promise<void>;
 +  steer(sessionId: string, message: string, model?: string, thinking?: string): Promise<void>;
    abort(sessionId: string): Promise<void>;
- }
- 
-@@ -274,6 +274,40 @@ function expectedSubagentModel(
+   /** A turn in a child's own chat ended: settles the run a restart cut off, if that is what the file holds. */
+   settleDirectTurn(sessionId: string, aborted: boolean): void;
+@@ -363,6 +363,40 @@ function expectedSubagentModel(
    }
  }
  
@@ -375,7 +376,7 @@ index 63befef..08eec8f 100644
  function parentContextText(parent: HostSession): string {
    const messages = parent.inner.sessionManager.buildSessionContext().messages;
    const serialized = JSON.stringify(messages);
-@@ -737,6 +771,7 @@ export function createSubagentController(
+@@ -850,6 +884,7 @@ export function createSubagentController(
      // The error reaches the model, so it also says what to do instead.
      if (!existsSync(wrapper.cwd)) throw new Error(`Directory does not exist: ${wrapper.cwd}. Start a new subagent instead.`);
  
@@ -383,7 +384,7 @@ index 63befef..08eec8f 100644
      const runInBackground = request.runInBackground ?? existing.runInBackground;
      const initialRun: SubagentRunInfo = {
        ...existing,
-@@ -782,6 +817,7 @@ export function createSubagentController(
+@@ -898,6 +933,7 @@ export function createSubagentController(
        let result: SubagentRunInfo;
        try {
          await prepareChildMcp(wrapper, stored);
@@ -391,7 +392,7 @@ index 63befef..08eec8f 100644
          await wrapper!.inner.prompt(request.task, { source: "rpc" });
          const text = wrapper!.inner.getLastAssistantText()?.trim();
          const stop = stored.abortRequested ? undefined : lastAssistantStop(manager);
-@@ -851,11 +887,13 @@ export function createSubagentController(
+@@ -989,11 +1025,13 @@ export function createSubagentController(
      return run && settleOrphanedRun(run);
    }
  

@@ -1,17 +1,20 @@
 diff --git a/lib/subagent-extension.integration.test.mjs b/lib/subagent-extension.integration.test.mjs
-index e9f2b01..e4a7fd5 100644
+index 9366302..18206f2 100644
 --- a/lib/subagent-extension.integration.test.mjs
 +++ b/lib/subagent-extension.integration.test.mjs
-@@ -247,13 +247,11 @@ test("Agent exposes only the parameters the model can choose correctly", async (
-     const { runtime } = recordingRuntime();
+@@ -248,7 +248,7 @@ test("Agent exposes only the parameters the model can choose correctly", async (
      session = await createSession(dir, faux, [createSubagentExtension(runtime, () => [])]);
      const agent = session.getAllTools().find((tool) => tool.name === "Agent");
-+    // pi-web-container 0004 offers the per-call profile overrides again, as before Pi Web 0.12.
      assert.deepEqual(Object.keys(agent.parameters.properties).sort(), [
--      "description", "input_files", "isolation", "model", "prompt", "resume", "run_in_background", "subagent_type",
-+      "description", "inherit_context", "input_files", "isolation", "load_context_files", "max_turns", "model",
-+      "prompt", "resume", "run_in_background", "subagent_type", "thinking",
+-      "description", "input_files", "isolation", "model", "prompt", "resume", "run_in_background", "subagent_type", "wait_timeout",
++      "description", "inherit_context", "input_files", "isolation", "load_context_files", "max_turns", "model", "prompt", "resume", "run_in_background", "subagent_type", "thinking", "wait_timeout",
      ]);
+     const resultTool = session.getAllTools().find((tool) => tool.name === "get_subagent_result");
+     for (const tool of [agent, resultTool]) {
+@@ -256,10 +256,6 @@ test("Agent exposes only the parameters the model can choose correctly", async (
+       assert.equal(tool.parameters.properties.wait_timeout.minimum, 1);
+       assert.ok(!tool.parameters.required.includes("wait_timeout"));
+     }
 -    // The profile owns these; a model that guessed one used to win over the configured value.
 -    for (const removed of ["thinking", "max_turns", "inherit_context"]) {
 -      assert.equal(agent.parameters.properties[removed], undefined, `${removed} must not be offered.`);
@@ -20,10 +23,10 @@ index e9f2b01..e4a7fd5 100644
      // be able to start a subagent.
      assert.equal(agent.parameters.properties.isolation.type, "string");
 diff --git a/lib/subagent-extension.test.mjs b/lib/subagent-extension.test.mjs
-index 9b07123..ed8a8c6 100644
+index ef0cb95..674eef3 100644
 --- a/lib/subagent-extension.test.mjs
 +++ b/lib/subagent-extension.test.mjs
-@@ -475,6 +475,34 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
+@@ -478,6 +478,34 @@ test("Agent resume routes the prompt to the existing-session runtime", async ()
    assert.equal(result.content[0].text, "Subagent existing completed.\n\ncontinued");
  });
  
@@ -59,10 +62,10 @@ index 9b07123..ed8a8c6 100644
    const { tools } = await loadTools({
      async start() { throw new Error("must not start"); },
 diff --git a/lib/subagent-extension.ts b/lib/subagent-extension.ts
-index df5eb5a..292ea76 100644
+index 1c8ed81..b9aadc8 100644
 --- a/lib/subagent-extension.ts
 +++ b/lib/subagent-extension.ts
-@@ -52,6 +52,9 @@ export interface StartSubagentRequest {
+@@ -140,6 +140,9 @@ export interface StartSubagentRequest {
    description: string;
    runInBackground?: boolean;
    model?: string;
@@ -72,9 +75,9 @@ index df5eb5a..292ea76 100644
    loadContextFiles?: boolean;
    isolation?: "worktree";
    signal?: AbortSignal;
-@@ -205,6 +208,9 @@ export function createSubagentExtension(
-           description: Type.String({ description: "Short activity label shown in the UI." }),
+@@ -294,6 +297,9 @@ export function createSubagentExtension(
            run_in_background: Type.Optional(Type.Boolean({ description: "Return immediately and notify this session when complete." })),
+           wait_timeout: waitTimeoutParameter(),
            model: Type.Optional(Type.String({ description: 'Optional provider/modelId override. Append ":<level>" (off, minimal, low, medium, high, xhigh, max) to also set the thinking level for this run, e.g. "provider/model:high".' })),
 +          thinking: Type.Optional(Type.String({ description: "Optional thinking level override for a new subagent (off, minimal, low, medium, high, xhigh, max). Beats a model's \":<level>\" suffix and the profile setting." })),
 +          max_turns: Type.Optional(Type.Number({ description: "Optional positive turn limit for a new subagent. Overrides the profile setting." })),
@@ -82,7 +85,7 @@ index df5eb5a..292ea76 100644
            load_context_files: Type.Optional(Type.Boolean({ description: "Load context files (AGENTS.md) for a new subagent. Overrides the profile setting." })),
            isolation: Type.Optional(Type.String({ description: 'Set to "worktree" to run the subagent in an isolated git worktree.' })),
          }),
-@@ -245,6 +251,9 @@ export function createSubagentExtension(
+@@ -357,6 +363,9 @@ export function createSubagentExtension(
                description: params.description,
                ...(params.run_in_background !== undefined ? { runInBackground: params.run_in_background } : {}),
                ...(params.model ? { model: params.model } : {}),
@@ -91,9 +94,9 @@ index df5eb5a..292ea76 100644
 +              ...(params.inherit_context !== undefined ? { inheritContext: params.inherit_context } : {}),
                ...(params.load_context_files !== undefined ? { loadContextFiles: params.load_context_files } : {}),
                ...(params.isolation === "worktree" ? { isolation: "worktree" as const } : {}),
-               signal,
+               signal: childAbort.signal,
 diff --git a/lib/subagent-runtime.test.mjs b/lib/subagent-runtime.test.mjs
-index 399cb9e..67ef047 100644
+index f89d662..190215a 100644
 --- a/lib/subagent-runtime.test.mjs
 +++ b/lib/subagent-runtime.test.mjs
 @@ -23,6 +23,19 @@ test("context file loading defaults off and a per-call value overrides the profi
@@ -117,10 +120,10 @@ index 399cb9e..67ef047 100644
    return {
      sessionId: "child-session",
 diff --git a/lib/subagent-runtime.ts b/lib/subagent-runtime.ts
-index 1d5e82a..63befef 100644
+index e4bd0ce..f08e339 100644
 --- a/lib/subagent-runtime.ts
 +++ b/lib/subagent-runtime.ts
-@@ -360,9 +360,10 @@ export function createSubagentController(
+@@ -449,9 +449,10 @@ export function createSubagentController(
          isolatedWorktree = await addWorktree(parent.cwd, `pi-web-agent-${randomUUID()}`);
        }
        const childCwd = isolatedWorktree?.path ?? parent.cwd;
@@ -133,7 +136,7 @@ index 1d5e82a..63befef 100644
  
        const agentDir = getAgentDir();
        const settingsManager = SettingsManager.create(childCwd, agentDir);
-@@ -508,7 +509,8 @@ export function createSubagentController(
+@@ -597,7 +598,8 @@ export function createSubagentController(
        // a model with a suffix chose both for this run.
        const callModel = parseSubagentModel(parentModelRuntime, request.model);
        const profileModel = callModel ? undefined : parseSubagentModel(parentModelRuntime, profile.model);

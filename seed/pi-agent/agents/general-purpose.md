@@ -4,6 +4,7 @@ display_name: General Purpose
 tools: read, bash, edit, write, grep, find, ls
 load_skills: true
 load_extensions: true
+load_context_files: true
 enabled: true
 inherit_context: false
 codemode: inherit
