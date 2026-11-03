@@ -144,30 +144,20 @@ index 3ffcad6..761efbf 100644
 +}
 +
 diff --git a/components/AppShell.tsx b/components/AppShell.tsx
-index 730f8d2..1a78630 100644
+index 7735875..6fb3262 100644
 --- a/components/AppShell.tsx
 +++ b/components/AppShell.tsx
-@@ -20,6 +20,8 @@ import { DebugPanel, DebugPanelBoundary } from "./DebugPanel";
- import { SessionChatPanel } from "./SessionChatPanel";
- import { TerminalPanel } from "./TerminalPanel";
+@@ -23,2 +23,4 @@ import { TerminalPanel } from "./TerminalPanel";
  import { newTerminalTab, restoreTerminalTabs, TERMINAL_TABS_KEY, type TerminalTab } from "./terminal-tab-state";
 +import { VncPanel } from "./VncPanel";
 +import { newVncTab, restoreVncTabs, type VncTab } from "./vnc-tab-state";
- import { useTheme } from "@/hooks/useTheme";
- import { useFontPreferences } from "@/hooks/useFontPreferences";
- import { useI18n } from "@/hooks/useI18n";
-@@ -566,6 +568,8 @@ export function AppShell() {
-   const fileWorkspaceGenerationRef = useRef(0);
-   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([]);
+ import { appendSideTab, restoreSideTabs, sideTabsKey } from "./side-tab-state";
+@@ -572,2 +574,4 @@ export function AppShell() {
    const [terminalsRestored, setTerminalsRestored] = useState(false);
-+  // The virtual desktop tab stays mounted like a terminal and shares its storage blob.
++  // The virtual desktop stays mounted and shares the terminal storage blob.
 +  const [vncTabs, setVncTabs] = useState<VncTab[]>([]);
-   // Subagent work tabs are session-scoped and transient: no persistence, and
-   // they are dropped when the project changes (they belong to its sessions).
-   const [agentTabs, setAgentTabs] = useState<{ sessionId: string; label: string; side?: boolean }[]>([]);
-@@ -578,6 +582,12 @@ export function AppShell() {
-       kind: "terminal" as const,
-       closing: Boolean(tab.closing),
+   // Subagent tabs remain open within a project; side tabs follow their main session.
+@@ -589,2 +593,8 @@ export function AppShell() {
      })),
 +    ...vncTabs.map((tab) => ({
 +      id: tab.id,
@@ -176,11 +166,7 @@ index 730f8d2..1a78630 100644
 +      kind: "vnc" as const,
 +    })),
      ...agentTabs.map((tab) => {
-       const session = tab.side ? sessionCatalog.find((item) => item.id === tab.sessionId) : undefined;
-       const label = session ? sideChatTitle(session, tab.label) : tab.label;
-@@ -592,11 +602,15 @@ export function AppShell() {
- 
-   useEffect(() => {
+@@ -609,7 +619,11 @@ export function AppShell() {
      try {
 -      const saved = restoreTerminalTabs(window.sessionStorage.getItem(TERMINAL_TABS_KEY));
 +      const raw = window.sessionStorage.getItem(TERMINAL_TABS_KEY);
@@ -196,25 +182,16 @@ index 730f8d2..1a78630 100644
 +        setActiveFileTabId(activeId);
 +        setRightPanelOpen(saved.open || vnc.open);
        }
-     } catch { /* storage is optional */ }
-     setTerminalsRestored(true);
-@@ -607,11 +621,12 @@ export function AppShell() {
-     try {
-       window.sessionStorage.setItem(TERMINAL_TABS_KEY, JSON.stringify({
+@@ -624,2 +638,3 @@ export function AppShell() {
          tabs: terminalTabs.map(({ id, cwd }) => ({ id, cwd })),
 +        vncTabs: vncTabs.map(({ id }) => ({ id })),
          activeId: activeFileTabId,
-         open: rightPanelOpen,
-       }));
+@@ -628,3 +643,3 @@ export function AppShell() {
      } catch { /* storage is optional */ }
 -  }, [terminalTabs, activeFileTabId, rightPanelOpen, terminalsRestored]);
 +  }, [terminalTabs, vncTabs, activeFileTabId, rightPanelOpen, terminalsRestored]);
  
-   const handleFileViewerStateChange = useCallback((
-     generation: number,
-@@ -1262,6 +1277,14 @@ export function AppShell() {
-     if (isMobile) setSidebarOpen(false);
-   }, [terminalTabs, isMobile]);
+@@ -1322,2 +1337,10 @@ export function AppShell() {
  
 +  const handleOpenVnc = useCallback(() => {
 +    const tab = vncTabs[0] ?? newVncTab();
@@ -225,22 +202,14 @@ index 730f8d2..1a78630 100644
 +  }, [vncTabs, isMobile]);
 +
    // Subagent work opens in a right-panel tab instead of hijacking the main chat.
-   const handleOpenSubagentTab = useCallback((sessionId: string, label: string, side?: boolean) => {
-     setAgentTabs((prev) => {
-@@ -1322,8 +1345,8 @@ export function AppShell() {
-     const replacement = tab.closing === "restart" ? newTerminalTab(tab.cwd) : null;
-     const remaining = terminalTabs.filter((item) => item.id !== tab.id);
+@@ -1388,4 +1411,4 @@ export function AppShell() {
      setTerminalTabs((tabs) => tabs.flatMap((item) => item.id !== tab.id ? [item] : replacement ? [replacement] : []));
 -    setActiveFileTabId((current) => current !== tab.id ? current : replacement?.id ?? remaining.at(-1)?.id ?? fileTabs.at(-1)?.id ?? lastAgentTabId(agentTabs));
 -    if (!replacement && !remaining.length && !fileTabs.length && !agentTabs.length) setRightPanelOpen(false);
 +    setActiveFileTabId((current) => current !== tab.id ? current : replacement?.id ?? remaining.at(-1)?.id ?? fileTabs.at(-1)?.id ?? vncTabs.at(-1)?.id ?? lastAgentTabId(agentTabs));
 +    if (!replacement && !remaining.length && !fileTabs.length && !vncTabs.length && !agentTabs.length) setRightPanelOpen(false);
    };
- 
-   const handleCloseFileTab = useCallback((tabId: string) => {
-@@ -1331,27 +1354,37 @@ export function AppShell() {
-       setTerminalTabs((tabs) => tabs.map((tab) => tab.id === tabId && !tab.closing ? { ...tab, closing: "close" } : tab));
-       return;
+@@ -1397,2 +1420,12 @@ export function AppShell() {
      }
 +    if (vncTabs.some((tab) => tab.id === tabId)) {
 +      const remainingVnc = vncTabs.filter((tab) => tab.id !== tabId);
@@ -253,9 +222,7 @@ index 730f8d2..1a78630 100644
 +      return;
 +    }
      if (tabId.startsWith("agent:")) {
-       const remainingAgents = agentTabs.filter((tab) => `agent:${tab.sessionId}` !== tabId);
-       setAgentTabs(remainingAgents);
-       setActiveFileTabId((cur) => {
+@@ -1402,5 +1435,5 @@ export function AppShell() {
          if (cur !== tabId) return cur;
 -        return fileTabs.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? lastAgentTabId(remainingAgents);
 +        return fileTabs.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? vncTabs.at(-1)?.id ?? lastAgentTabId(remainingAgents);
@@ -263,15 +230,12 @@ index 730f8d2..1a78630 100644
 -      if (fileTabs.length === 0 && terminalTabs.length === 0 && remainingAgents.length === 0) setRightPanelOpen(false);
 +      if (fileTabs.length === 0 && terminalTabs.length === 0 && vncTabs.length === 0 && remainingAgents.length === 0) setRightPanelOpen(false);
        return;
-     }
-     setFileTabs((prev) => {
+@@ -1409,3 +1442,3 @@ export function AppShell() {
        const next = prev.filter((t) => t.id !== tabId);
 -      if (next.length === 0 && terminalTabs.length === 0 && agentTabs.length === 0) setRightPanelOpen(false);
 +      if (next.length === 0 && terminalTabs.length === 0 && vncTabs.length === 0 && agentTabs.length === 0) setRightPanelOpen(false);
        return next;
-     });
-     setActiveFileTabId((cur) => {
-       if (cur !== tabId) return cur;
+@@ -1415,5 +1448,5 @@ export function AppShell() {
        const remaining = fileTabs.filter((t) => t.id !== tabId);
 -      return remaining.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? lastAgentTabId(agentTabs);
 +      return remaining.at(-1)?.id ?? terminalTabs.at(-1)?.id ?? vncTabs.at(-1)?.id ?? lastAgentTabId(agentTabs);
@@ -279,28 +243,16 @@ index 730f8d2..1a78630 100644
 -  }, [fileTabs, terminalTabs, agentTabs]);
 +  }, [fileTabs, terminalTabs, vncTabs, agentTabs]);
  
-   // The Agents switcher's Delete on a side chat: its tab goes with it, and the
-   // main chat showing it goes back to the parent, as the Main agent row does
-@@ -1550,6 +1583,7 @@ export function AppShell() {
-         onCwdChange={handleCwdChange}
-         onOpenFile={handleOpenFile}
+@@ -1616,2 +1649,3 @@ export function AppShell() {
          onOpenTerminal={handleOpenTerminal}
 +        onOpenVnc={handleOpenVnc}
          explorerRefreshKey={explorerRefreshKey}
-         onExplorerRefresh={handleExplorerRefresh}
-         onAtMention={handleAtMention}
-@@ -2944,7 +2978,7 @@ export function AppShell() {
-                 { sourceSessionId: activeFileTab.sourceSessionId, page },
-               )}
+@@ -3011,3 +3045,3 @@ export function AppShell() {
              />
 -          ) : !terminalTabs.some((tab) => tab.id === activeFileTabId) && !activeAgentTab ? (
 +          ) : !terminalTabs.some((tab) => tab.id === activeFileTabId) && !vncTabs.some((tab) => tab.id === activeFileTabId) && !activeAgentTab ? (
              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: 12 }}>
-                {translate("files.noneOpen")}
-             </div>
-@@ -2960,6 +2994,11 @@ export function AppShell() {
-               />
-             </div>
+@@ -3027,2 +3061,7 @@ export function AppShell() {
            ))}
 +          {vncTabs.map((tab) => (
 +            <div key={tab.id} hidden={tab.id !== activeFileTabId} style={{ width: "100%", height: "100%" }}>
@@ -308,8 +260,6 @@ index 730f8d2..1a78630 100644
 +            </div>
 +          ))}
            {activeAgentTab && (
-             <SessionChatPanel
-               key={activeAgentTab.sessionId}
 diff --git a/components/SessionSidebar.tsx b/components/SessionSidebar.tsx
 index cff9217..686b46f 100644
 --- a/components/SessionSidebar.tsx
