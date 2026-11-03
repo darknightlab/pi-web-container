@@ -41,6 +41,7 @@ RUN mkdir -p /tmp/pi-web-package \
 
 COPY npm/runtime/package.json npm/runtime/package-lock.json /usr/local/lib/pi-web-container/runtime/
 COPY patches/pi-coding-agent/ /tmp/pi-coding-agent-patches/
+COPY tests/sdk-projected-context.mjs /tmp/sdk-projected-context.mjs
 WORKDIR /usr/local/lib/pi-web-container/runtime
 # Paseo is installed from the lock. The Pi CLI is not pinned here: it is
 # installed at the exact version of the SDK pi-web was built with, so the
@@ -59,8 +60,9 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
         patch -p1 --forward --batch --no-backup-if-mismatch -r - -d "$dir" < "$patch" \
           || { echo "ERROR: patch failed to apply (rebase or remove it): $patch" >&2; exit 1; }; \
       done; \
+      node /tmp/sdk-projected-context.mjs "$dir" || exit 1; \
     done \
- && rm -rf /tmp/pi-coding-agent-patches \
+ && rm -rf /tmp/pi-coding-agent-patches /tmp/sdk-projected-context.mjs \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/pi /usr/local/bin/pi \
  && ln -s ../lib/pi-web-container/runtime/node_modules/.bin/paseo /usr/local/bin/paseo \
  && pi --version \
